@@ -29,10 +29,10 @@ class TaskItemWidget(QFrame):
 
         self.task = task
         self.current_date = current_date
+        self.drag_start_position = QPoint()  # 드래그 시작 위치 초기화
 
         # 스타일 설정 - PyQt6 호환성 수정
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        # QFrame.Shadow.Raised 대신 정수 값 사용
         self.setFrameShadow(QFrame.Shadow.Raised)
         self.setLineWidth(1)
 
@@ -68,20 +68,56 @@ class TaskItemWidget(QFrame):
         # 제목 행
         title_layout = QHBoxLayout()
 
-        # 카테고리 라벨
+        # 중요 표시 아이콘 (맨 앞에 추가)
+        if self.task.important and not self.task.completed:
+            important_icon = QLabel("🔥")  # 불꽃 이모지
+            important_icon.setStyleSheet("""
+                font-size: 16px;
+                font-weight: bold;
+                margin-right: 5px;
+                border: none;
+            """)
+            important_icon.setToolTip("중요 작업")
+            title_layout.addWidget(important_icon)
+
+        # 카테고리 라벨 - 중요 일정일 때 테두리 제거
         category_label = QLabel(self.task.category)
-        category_label.setStyleSheet(
-            f"color: white; background-color: {self.get_category_color()}; "
-            f"padding: 2px 5px; border-radius: 3px; font-size: 10px;"
-        )
+        if self.task.important and not self.task.completed:
+            # 중요 일정: 테두리 없는 스타일
+            category_label.setStyleSheet(
+                f"color: white; background-color: {self.get_category_color()}; "
+                f"padding: 2px 5px; border: none; border-radius: 3px; font-size: 10px;"
+            )
+        else:
+            # 일반 일정: 기본 스타일
+            category_label.setStyleSheet(
+                f"color: white; background-color: {self.get_category_color()}; "
+                f"padding: 2px 5px; border-radius: 3px; font-size: 10px;"
+            )
         category_label.setMaximumHeight(20)
         title_layout.addWidget(category_label)
 
         # 제목 라벨
-        title_label = QLabel(self.task.title)
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        title_text = self.task.title
+        if self.task.important and not self.task.completed:
+            title_text = f"【중요】{self.task.title}"  # 중요 표시 텍스트 추가
+
+        title_label = QLabel(title_text)
+
+        # 제목 스타일 설정
         if self.task.completed:
-            title_label.setStyleSheet("text-decoration: line-through; color: #9E9E9E; font-size: 14px;")
+            title_label.setStyleSheet("text-decoration: line-through; color: #9E9E9E; font-size: 14px; border: none;")
+        elif self.task.important:
+            title_label.setStyleSheet("""
+                font-weight: bold; 
+                font-size: 15px; 
+                color: #D32F2F;
+                text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+                border: none;
+            """)
+        else:
+            title_label.setStyleSheet("font-weight: bold; font-size: 14px; border: none;")
+
         title_layout.addWidget(title_label)
 
         title_layout.addStretch()
@@ -89,7 +125,7 @@ class TaskItemWidget(QFrame):
         # 다른 날짜의 작업인 경우 날짜 표시
         if self.task.created_date != self.current_date:
             date_label = QLabel(self.task.created_date)
-            date_label.setStyleSheet("color: #9E9E9E; font-size: 10px;")
+            date_label.setStyleSheet("color: #9E9E9E; font-size: 10px; border: none;")
             title_layout.addWidget(date_label)
 
         info_layout.addLayout(title_layout)
@@ -98,42 +134,140 @@ class TaskItemWidget(QFrame):
         if self.task.content:
             content_label = QLabel(self.task.content)
             content_label.setWordWrap(True)
-            content_label.setStyleSheet("color: #616161; font-size: 12px;")
+
             if self.task.completed:
-                content_label.setStyleSheet("color: #9E9E9E; font-size: 12px;")
+                content_label.setStyleSheet("color: #9E9E9E; font-size: 12px; border: none;")
+            elif self.task.important:
+                content_label.setStyleSheet("""
+                    color: #D32F2F; 
+                    font-size: 12px; 
+                    font-weight: 500;
+                    border: none;
+                """)
+            else:
+                content_label.setStyleSheet("color: #616161; font-size: 12px; border: none;")
             info_layout.addWidget(content_label)
 
         layout.addLayout(info_layout, stretch=1)
 
-        # 중요 버튼
+        # 중요 버튼 - 중요 일정일 때 테두리 완전 제거
         self.important_button = QPushButton("★" if self.task.important else "☆")
         self.important_button.setCheckable(True)
         self.important_button.setChecked(self.task.important)
-        self.important_button.setStyleSheet(
-            "background: transparent; border: none; font-size: 16px; color: #FFB300;"
-        )
+
+        # 중요 버튼 스타일 - 테두리 완전 제거
+        if self.task.important:
+            self.important_button.setStyleSheet("""
+                QPushButton {
+                    background: transparent; 
+                    border: none;
+                    outline: none;
+                    font-size: 18px; 
+                    color: #FFD700;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    color: #FFC107;
+                    border: none;
+                    outline: none;
+                }
+                QPushButton:focus {
+                    border: none;
+                    outline: none;
+                }
+            """)
+        else:
+            self.important_button.setStyleSheet("""
+                QPushButton {
+                    background: transparent; 
+                    border: none;
+                    outline: none;
+                    font-size: 16px; 
+                    color: #CCCCCC;
+                }
+                QPushButton:hover {
+                    color: #FFD700;
+                    border: none;
+                    outline: none;
+                }
+                QPushButton:focus {
+                    border: none;
+                    outline: none;
+                }
+            """)
+
         self.important_button.setToolTip("중요 표시")
         self.important_button.setMaximumWidth(30)
         self.important_button.toggled.connect(self.on_important_toggled)
         layout.addWidget(self.important_button)
 
-        # 편집 버튼
+        # 편집 버튼 - 중요 일정일 때 테두리 제거
         edit_button = QPushButton("편집")
-        edit_button.setStyleSheet(
-            "background: transparent; border: 1px solid #CCCCCC; border-radius: 3px; "
-            "padding: 2px; font-size: 11px;"
-        )
+        if self.task.important and not self.task.completed:
+            edit_button.setStyleSheet("""
+                QPushButton {
+                    background: transparent; 
+                    border: none;
+                    outline: none;
+                    border-radius: 3px; 
+                    padding: 2px; 
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(0,0,0,0.1);
+                    border: none;
+                    outline: none;
+                }
+                QPushButton:focus {
+                    border: none;
+                    outline: none;
+                }
+            """)
+        else:
+            edit_button.setStyleSheet("""
+                background: transparent; 
+                border: 1px solid #CCCCCC; 
+                border-radius: 3px; 
+                padding: 2px; 
+                font-size: 11px;
+            """)
         edit_button.setToolTip("편집")
         edit_button.setMaximumWidth(40)
         edit_button.clicked.connect(self.on_edit_clicked)
         layout.addWidget(edit_button)
 
-        # 삭제 버튼
+        # 삭제 버튼 - 중요 일정일 때 테두리 제거
         delete_button = QPushButton("삭제")
-        delete_button.setStyleSheet(
-            "background: transparent; border: 1px solid #CCCCCC; border-radius: 3px; "
-            "padding: 2px; font-size: 11px; color: #E53935;"
-        )
+        if self.task.important and not self.task.completed:
+            delete_button.setStyleSheet("""
+                QPushButton {
+                    background: transparent; 
+                    border: none;
+                    outline: none;
+                    border-radius: 3px; 
+                    padding: 2px; 
+                    font-size: 11px; 
+                    color: #E53935;
+                }
+                QPushButton:hover {
+                    background-color: rgba(229,57,53,0.1);
+                    border: none;
+                    outline: none;
+                }
+                QPushButton:focus {
+                    border: none;
+                    outline: none;
+                }
+            """)
+        else:
+            delete_button.setStyleSheet("""
+                background: transparent; 
+                border: 1px solid #CCCCCC; 
+                border-radius: 3px; 
+                padding: 2px; 
+                font-size: 11px; 
+                color: #E53935;
+            """)
         delete_button.setToolTip("삭제")
         delete_button.setMaximumWidth(40)
         delete_button.clicked.connect(self.on_delete_clicked)
@@ -141,6 +275,7 @@ class TaskItemWidget(QFrame):
 
         # 작업 배경색 설정
         self.apply_task_style()
+
     def get_category_color(self):
         """작업 카테고리에 해당하는 색상 반환"""
         category_colors = {
@@ -157,7 +292,60 @@ class TaskItemWidget(QFrame):
 
     def on_important_toggled(self, checked):
         """중요 상태 변경 처리"""
+        # 버튼 텍스트 및 스타일 업데이트
         self.important_button.setText("★" if checked else "☆")
+
+        if checked:
+            self.important_button.setStyleSheet("""
+                QPushButton {
+                    background: transparent; 
+                    border: none;
+                    outline: none;
+                    font-size: 18px; 
+                    color: #FFD700;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    color: #FFC107;
+                    border: none;
+                    outline: none;
+                }
+                QPushButton:focus {
+                    border: none;
+                    outline: none;
+                }
+            """)
+        else:
+            self.important_button.setStyleSheet("""
+                QPushButton {
+                    background: transparent; 
+                    border: none;
+                    outline: none;
+                    font-size: 16px; 
+                    color: #CCCCCC;
+                }
+                QPushButton:hover {
+                    color: #FFD700;
+                    border: none;
+                    outline: none;
+                }
+                QPushButton:focus {
+                    border: none;
+                    outline: none;
+                }
+            """)
+
+        # 작업 객체 업데이트
+        self.task.important = checked
+
+        # UI 전체 스타일 즉시 업데이트
+        self.apply_task_style()
+
+        # 제목과 내용 스타일도 업데이트 (전체 UI 다시 그리기)
+        self.setParent(None)
+        self.setParent(self.parent())
+
+        # 신호 방출
         self.task_important_toggled.emit(self.task.id, checked)
 
     def on_edit_clicked(self):
@@ -168,55 +356,63 @@ class TaskItemWidget(QFrame):
         """삭제 버튼 클릭 처리"""
         self.delete_task.emit(self.task.id)
 
-
     def apply_task_style(self):
         """작업 스타일 적용 (배경색, 중요 표시 등)"""
-        style = ""
-
         # 배경색 설정
         bg_color = "#FFFFFF"  # 기본 흰색
+        border_color = "#E0E0E0"  # 기본 테두리
+        shadow = ""  # 그림자 효과
 
-        # 중요 작업인 경우 노란색 배경 (날짜 상관없이)
-        if self.task.important and not self.task.completed:
-            bg_color = "#FFF8E1"  # 연한 노란색
-            border_color = "#FFE082"  # 노란색 테두리
-        else:
-            border_color = "#E0E0E0"  # 기본 테두리
+        # 완료된 작업
+        if self.task.completed:
+            bg_color = "#F5F5F5"  # 회색 배경
+            border_color = "#CCCCCC"
+        # 중요 작업 (미완료) - 주황색 테두리만 유지
+        elif self.task.important:
+            bg_color = "#FFF3E0"  # 연한 주황 배경
+            border_color = "#FF6B00"  # 주황 테두리 (이것만 유지)
 
-        # 사용자 지정 배경색이 있는 경우
-        if hasattr(self.task, 'bg_color') and self.task.bg_color != "none":
+            # 다른 날짜의 중요 작업은 더 강조
+            if self.task.created_date != self.current_date:
+                bg_color = "#FFE0B2"  # 더 진한 주황 배경
+                border_color = "#FF5722"  # 더 진한 주황 테두리
+        # 사용자 지정 배경색이 있는 경우 (중요하지 않은 작업만)
+        elif hasattr(self.task, 'bg_color') and self.task.bg_color != "none":
             try:
-                # 배경색 가져오기
                 bg_color = self.task.get_bg_color_hex()
-                # 테두리색은 배경색과 비슷하게 설정
                 border_color = bg_color
             except Exception as e:
                 print(f"배경색 설정 중 오류: {e}")
 
-        # 스타일 문자열 구성
+        # 중요 작업에 대한 특별한 테두리 설정
+        border_width = "3px" if (self.task.important and not self.task.completed) else "1px"
+
+        # 스타일 문자열 구성 - 그림자 효과 제거
         style = f"""
-            background-color: {bg_color}; 
-            border: 1px solid {border_color}; 
-            border-radius: 5px; 
-            margin: 2px;
+            QFrame {{
+                background-color: {bg_color}; 
+                border: {border_width} solid {border_color}; 
+                border-radius: 8px; 
+                margin: 2px;
+            }}
         """
+
+        # 중요 작업에 호버 효과 - 그림자 제거, 색상만 변경
+        if self.task.important and not self.task.completed:
+            style += f"""
+            QFrame:hover {{
+                background-color: #FFCC80;
+                border: 3px solid #FF5722;
+            }}
+            """
 
         self.setStyleSheet(style)
 
-    # TaskItemWidget 클래스에 추가
     def mousePressEvent(self, event):
         """마우스 누름 이벤트 처리"""
         if event.button() == Qt.MouseButton.LeftButton:
             # 드래그 시작 위치 저장
             self.drag_start_position = event.position().toPoint()
-
-            # 인덱스 저장
-            self.index = self.property("index")
-
-            # 부모 위젯에 알리기
-            if hasattr(self.parent(), 'drag_source_index'):
-                self.parent().drag_source_index = self.index
-
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -228,22 +424,31 @@ class TaskItemWidget(QFrame):
         if (event.position().toPoint() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
             return
 
-        # 드래그 시작
-        drag = QDrag(self)
-        mime_data = QMimeData()
-        mime_data.setText(f"task-{self.index}")
-        drag.setMimeData(mime_data)
+        # 부모 위젯에서 현재 인덱스 가져오기
+        parent_widget = self.parent()
+        while parent_widget and not hasattr(parent_widget, 'get_task_index'):
+            parent_widget = parent_widget.parent()
 
-        # 반투명 드래그 효과
-        pixmap = self.grab()
-        painter = QPainter(pixmap)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-        painter.fillRect(pixmap.rect(), QColor(0, 0, 0, 127))
-        painter.end()
-        drag.setPixmap(pixmap)
+        if parent_widget:
+            index = parent_widget.get_task_index(self)
+            if index >= 0:
+                # 드래그 시작
+                drag = QDrag(self)
+                mime_data = QMimeData()
+                mime_data.setText(f"task-{index}")
+                drag.setMimeData(mime_data)
 
-        # 드래그 실행
-        drag.exec(Qt.DropAction.MoveAction)
+                # 반투명 드래그 효과
+                pixmap = self.grab()
+                painter = QPainter(pixmap)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+                painter.fillRect(pixmap.rect(), QColor(0, 0, 0, 127))
+                painter.end()
+                drag.setPixmap(pixmap)
+
+                # 드래그 실행
+                drag.exec(Qt.DropAction.MoveAction)
+
 
 class TaskListWidget(QScrollArea):
     """작업 목록 위젯"""
@@ -262,6 +467,11 @@ class TaskListWidget(QScrollArea):
         self.storage_manager = storage_manager
         self.tasks = []
         self.current_date = ""
+        self.drag_source_index = -1
+        self.drag_target_index = -1
+
+        # 드래그 앤 드롭 활성화
+        self.setAcceptDrops(True)
 
         # 스크롤 영역 설정
         self.setWidgetResizable(True)
@@ -289,6 +499,24 @@ class TaskListWidget(QScrollArea):
             self.layout.addWidget(self.empty_label)
         except Exception as e:
             print(f"빈 라벨 생성 중 오류 발생: {e}")
+
+    def get_task_index(self, task_widget):
+        """작업 위젯의 인덱스 반환 (해당 날짜 작업만 기준)"""
+        try:
+            # 해당 날짜의 작업만 필터링
+            date_only_tasks = [t for t in self.tasks if t.created_date == self.current_date]
+
+            # 위젯에서 작업 ID 가져오기
+            widget_task_id = task_widget.task.id
+
+            # 해당 날짜 작업에서 인덱스 찾기
+            for i, task in enumerate(date_only_tasks):
+                if task.id == widget_task_id:
+                    return i
+
+        except Exception as e:
+            print(f"작업 인덱스 찾기 중 오류: {e}")
+        return -1
 
     def load_tasks(self, tasks, current_date):
         """작업 목록 로드
@@ -359,7 +587,7 @@ class TaskListWidget(QScrollArea):
                 if widget is None:
                     continue
 
-                if widget == self.empty_label:
+                if hasattr(self, 'empty_label') and widget == self.empty_label:
                     continue
 
                 try:
@@ -379,12 +607,7 @@ class TaskListWidget(QScrollArea):
             print(f"작업 위젯 제거 중 오류 발생: {e}")
 
     def on_task_toggled(self, task_id, completed):
-        """작업 완료 상태 변경 처리
-
-        Args:
-            task_id (str): 작업 ID
-            completed (bool): 완료 상태
-        """
+        """작업 완료 상태 변경 처리"""
         try:
             # 작업 찾기
             for task in self.tasks:
@@ -398,12 +621,7 @@ class TaskListWidget(QScrollArea):
             print(f"작업 완료 상태 변경 중 오류 발생: {e}")
 
     def on_task_important_toggled(self, task_id, important):
-        """작업 중요 상태 변경 처리
-
-        Args:
-            task_id (str): 작업 ID
-            important (bool): 중요 상태
-        """
+        """작업 중요 상태 변경 처리"""
         try:
             # 작업 찾기
             for task in self.tasks:
@@ -417,11 +635,7 @@ class TaskListWidget(QScrollArea):
             print(f"작업 중요 상태 변경 중 오류 발생: {e}")
 
     def on_edit_task(self, task_id):
-        """작업 편집 대화상자 표시
-
-        Args:
-            task_id (str): 편집할 작업 ID
-        """
+        """작업 편집 대화상자 표시"""
         try:
             # 작업 찾기
             for task in self.tasks:
@@ -435,11 +649,7 @@ class TaskListWidget(QScrollArea):
             print(f"작업 편집 중 오류 발생: {e}")
 
     def on_delete_task(self, task_id):
-        """작업 삭제 확인 및 처리
-
-        Args:
-            task_id (str): 삭제할 작업 ID
-        """
+        """작업 삭제 확인 및 처리"""
         try:
             # 확인 메시지 표시
             reply = QMessageBox.question(
@@ -458,94 +668,58 @@ class TaskListWidget(QScrollArea):
             print(f"작업 삭제 중 오류 발생: {e}")
 
     def reorder_tasks(self, source_index, target_index):
-        """작업 순서 변경
-
-        Args:
-            source_index (int): 원본 인덱스
-            target_index (int): 대상 인덱스
-        """
+        """작업 순서 변경"""
         try:
+            # 해당 날짜의 작업만 필터링 (중요한 다른 날짜 작업 제외)
+            date_only_tasks = [t for t in self.tasks if t.created_date == self.current_date]
+
             # 인덱스 범위 검사
-            if source_index < 0 or source_index >= len(self.tasks):
+            if source_index < 0 or source_index >= len(date_only_tasks):
+                print(f"잘못된 소스 인덱스: {source_index}, 날짜별 작업 수: {len(date_only_tasks)}")
                 return
-            if target_index < 0 or target_index >= len(self.tasks):
+            if target_index < 0 or target_index >= len(date_only_tasks):
+                print(f"잘못된 타겟 인덱스: {target_index}, 날짜별 작업 수: {len(date_only_tasks)}")
                 return
             if source_index == target_index:
                 return
 
-            # 작업 순서 변경
-            task = self.tasks.pop(source_index)
-            self.tasks.insert(target_index, task)
+            print(f"UI에서 순서 변경 요청: {source_index} -> {target_index}")
+            print(f"변경 전 UI 작업 목록:")
+            for i, task in enumerate(date_only_tasks):
+                print(f"  UI {i}: {task.title}")
 
-            # 저장소에 순서 업데이트
-            # 중요: 이 부분은 작업 순서 저장 기능을 구현해야 함
-            # 현재는 실제 저장소에는 반영되지 않고 UI에만 반영됨
+            # 저장소에서 순서 변경 처리
+            success = self.storage_manager.reorder_tasks(self.current_date, source_index, target_index)
 
-            # UI 업데이트
-            self.reload_tasks()
+            if success:
+                # 즉시 저장
+                self.storage_manager.save_data()
+                print("데이터 즉시 저장 완료")
 
-            # 변경 알림
-            self.task_edited.emit()
-        except Exception as e:
-            print(f"작업 순서 변경 중 오류 발생: {e}")
+                # UI 업데이트 - 저장소에서 다시 데이터 가져오기
+                updated_tasks = self.storage_manager.get_tasks_by_date(self.current_date)
+                self.load_tasks(updated_tasks, self.current_date)
 
-    def reload_tasks(self):
-        """현재 작업 목록 다시 로드"""
-        try:
-            # 기존 작업 위젯 제거
-            self.clear_tasks()
+                # 변경 알림
+                self.task_edited.emit()
 
-            if self.tasks:
-                try:
-                    # 작업이 있으면 빈 라벨 숨기기
-                    if self.empty_label is not None:
-                        self.empty_label.hide()
-                except (RuntimeError, AttributeError) as e:
-                    print(f"빈 라벨 숨기기 중 오류: {e}")
-                    # 오류 발생 시 빈 라벨 재생성
-                    self.create_empty_label()
-                    self.empty_label.hide()
-
-                # 작업 위젯 추가
-                for i, task in enumerate(self.tasks):
-                    try:
-                        task_widget = TaskItemWidget(task, self.current_date)
-                        task_widget.setProperty("index", i)  # 인덱스 저장
-
-                        # 시그널 연결
-                        task_widget.task_toggled.connect(self.on_task_toggled)
-                        task_widget.task_important_toggled.connect(self.on_task_important_toggled)
-                        task_widget.edit_task.connect(self.on_edit_task)
-                        task_widget.delete_task.connect(self.on_delete_task)
-
-                        self.layout.addWidget(task_widget)
-                    except Exception as e:
-                        print(f"작업 위젯 추가 중 오류: {e}")
+                print(f"UI 작업 순서 변경 완료: {source_index} -> {target_index}")
             else:
-                try:
-                    # 작업이 없으면 빈 라벨 표시
-                    if self.empty_label is not None:
-                        self.empty_label.show()
-                except (RuntimeError, AttributeError) as e:
-                    print(f"빈 라벨 표시 중 오류: {e}")
-                    # 오류 발생 시 빈 라벨 재생성
-                    self.create_empty_label()
-                    self.empty_label.show()
+                print("작업 순서 변경 실패")
+
         except Exception as e:
-            print(f"작업 목록 다시 로드 중 오류 발생: {e}")
+            print(f"UI 작업 순서 변경 중 오류 발생: {e}")
+            import traceback
+            traceback.print_exc()
 
-    def get_task_widget_at(self, pos):
-        """주어진 위치의 작업 위젯 반환
-
-        Args:
-            pos (QPoint): 마우스 위치
-
-        Returns:
-            tuple: (작업 위젯, 인덱스) 또는 (None, -1)
-        """
+    def get_task_widget_at_position(self, pos):
+        """주어진 위치의 작업 위젯과 인덱스 반환"""
         try:
             # 컨테이너 위젯 내부 위치로 변환
             container_pos = self.container.mapFromParent(pos)
+
+            # 해당 날짜의 작업만 필터링
+            date_only_tasks = [t for t in self.tasks if t.created_date == self.current_date]
 
             # 위치에 있는 위젯 찾기
             for i in range(self.layout.count()):
@@ -554,18 +728,18 @@ class TaskListWidget(QScrollArea):
                     continue
 
                 widget = item.widget()
-                if widget is None or widget == self.empty_label:
+                if widget is None or (hasattr(self, 'empty_label') and widget == self.empty_label):
                     continue
 
                 # 위젯의 영역 확인
                 rect = widget.geometry()
                 if rect.contains(container_pos):
-                    # 인덱스 반환
-                    index = widget.property("index")
-                    if index is None:
-                        index = i - 1  # empty_label이 있을 경우 조정
+                    # 실제 작업 인덱스 계산 (해당 날짜 기준)
+                    widget_task_id = widget.task.id
+                    for task_idx, task in enumerate(date_only_tasks):
+                        if task.id == widget_task_id:
+                            return (widget, task_idx)
 
-                    return (widget, index)
         except Exception as e:
             print(f"작업 위젯 찾기 중 오류 발생: {e}")
 
@@ -574,60 +748,94 @@ class TaskListWidget(QScrollArea):
     # 드래그 앤 드롭 이벤트 처리
     def dragEnterEvent(self, event):
         """드래그 시작 이벤트 처리"""
-        # 내부 드래그만 허용
-        if event.source() == self:
-            event.accept()
-        else:
+        try:
+            # 마임 데이터 확인
+            if event.mimeData().hasText() and event.mimeData().text().startswith("task-"):
+                # 소스 인덱스 추출
+                source_index_str = event.mimeData().text().replace("task-", "")
+                self.drag_source_index = int(source_index_str)
+
+                # 해당 날짜 작업 수 확인
+                date_only_tasks = [t for t in self.tasks if t.created_date == self.current_date]
+
+                if 0 <= self.drag_source_index < len(date_only_tasks):
+                    event.accept()
+                    print(f"드래그 시작: 인덱스 {self.drag_source_index} (해당 날짜 작업 수: {len(date_only_tasks)})")
+                else:
+                    print(f"드래그 인덱스 범위 오류: {self.drag_source_index}, 작업 수: {len(date_only_tasks)}")
+                    event.ignore()
+            else:
+                event.ignore()
+        except Exception as e:
+            print(f"드래그 시작 이벤트 처리 중 오류: {e}")
             event.ignore()
 
     def dragMoveEvent(self, event):
         """드래그 이동 이벤트 처리"""
         try:
-            widget, index = self.get_task_widget_at(event.position().toPoint())
+            if self.drag_source_index < 0:
+                event.ignore()
+                return
 
-            if widget is not None and index >= 0:
-                # 대상 인덱스 저장
-                self.drag_target_index = index
+            # 현재 위치의 작업 위젯 찾기
+            widget, target_index = self.get_task_widget_at_position(event.position().toPoint())
 
-                # 위젯 상태 표시
+            if widget is not None and target_index >= 0:
+                self.drag_target_index = target_index
+
+                # 모든 위젯의 스타일 초기화
                 for i in range(self.layout.count()):
                     item = self.layout.itemAt(i)
-                    if item is None:
-                        continue
+                    if item and item.widget() and hasattr(item.widget(), 'apply_task_style'):
+                        item.widget().apply_task_style()
 
-                    w = item.widget()
-                    if w is None or w == self.empty_label:
-                        continue
-
-                    if w == widget:
-                        # 대상 위젯 강조
-                        w.setStyleSheet(w.styleSheet() + "border: 2px dashed #4285F4;")
-                    else:
-                        # 스타일 복원
-                        if hasattr(w, 'apply_task_style'):
-                            w.apply_task_style()
+                # 대상 위젯 강조
+                if hasattr(widget, 'apply_task_style'):
+                    widget.setStyleSheet(widget.styleSheet() + " border: 2px dashed #4285F4;")
 
                 event.accept()
             else:
+                self.drag_target_index = -1
                 event.ignore()
         except Exception as e:
-            print(f"드래그 이동 이벤트 처리 중 오류 발생: {e}")
+            print(f"드래그 이동 이벤트 처리 중 오류: {e}")
             event.ignore()
 
     def dropEvent(self, event):
         """드롭 이벤트 처리"""
         try:
-            if self.drag_source_index >= 0 and self.drag_target_index >= 0:
+            print(f"드롭 이벤트: 소스={self.drag_source_index}, 타겟={self.drag_target_index}")
+
+            if (self.drag_source_index >= 0 and self.drag_target_index >= 0 and
+                    self.drag_source_index != self.drag_target_index):
+
                 # 작업 순서 변경
                 self.reorder_tasks(self.drag_source_index, self.drag_target_index)
-
-                # 상태 초기화
-                self.drag_source_index = -1
-                self.drag_target_index = -1
-
                 event.accept()
             else:
                 event.ignore()
+
+            # 상태 초기화
+            self.drag_source_index = -1
+            self.drag_target_index = -1
+
+            # 모든 위젯 스타일 복원
+            for i in range(self.layout.count()):
+                item = self.layout.itemAt(i)
+                if item and item.widget() and hasattr(item.widget(), 'apply_task_style'):
+                    item.widget().apply_task_style()
+
         except Exception as e:
-            print(f"드롭 이벤트 처리 중 오류 발생: {e}")
+            print(f"드롭 이벤트 처리 중 오류: {e}")
             event.ignore()
+
+    def dragLeaveEvent(self, event):
+        """드래그 떠남 이벤트 처리"""
+        try:
+            # 모든 위젯 스타일 복원
+            for i in range(self.layout.count()):
+                item = self.layout.itemAt(i)
+                if item and item.widget() and hasattr(item.widget(), 'apply_task_style'):
+                    item.widget().apply_task_style()
+        except Exception as e:
+            print(f"드래그 떠남 이벤트 처리 중 오류: {e}")

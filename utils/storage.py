@@ -83,6 +83,16 @@ class StorageManager:
         Args:
             task (Task): 추가할 작업 객체
         """
+        # 해당 날짜의 마지막 순서 번호 계산
+        date_tasks = [t for t in self.tasks if t.created_date == task.created_date]
+        if hasattr(task, 'order') and task.order is not None:
+            # order가 이미 설정되어 있으면 그대로 사용
+            pass
+        else:
+            # 새 작업이면 마지막 순서로 설정
+            max_order = max([getattr(t, 'order', 0) for t in date_tasks] + [0])
+            task.order = max_order + 1
+
         self.tasks.append(task)
         self.tasks_changed = True
 
@@ -114,13 +124,98 @@ class StorageManager:
         """
         for i, task in enumerate(self.tasks):
             if task.id == task_id:
+                deleted_task = self.tasks[i]
                 del self.tasks[i]
+
+                # 삭제된 작업 이후의 순서 재정렬
+                self._reorder_tasks_after_deletion(deleted_task.created_date, getattr(deleted_task, 'order', 0))
+
                 self.tasks_changed = True
                 return True
         return False
 
+    def _reorder_tasks_after_deletion(self, date_str, deleted_order):
+        """작업 삭제 후 순서 재정렬"""
+        date_tasks = [t for t in self.tasks if t.created_date == date_str]
+        for task in date_tasks:
+            if hasattr(task, 'order') and task.order > deleted_order:
+                task.order -= 1
+
+    def reorder_tasks(self, date_str, source_index, target_index):
+        """특정 날짜의 작업 순서 변경
+
+        Args:
+            date_str (str): 날짜 (YYYY-MM-DD)
+            source_index (int): 원본 인덱스
+            target_index (int): 대상 인덱스
+
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # 해당 날짜의 작업들만 필터링 (중요한 다른 날짜 작업 제외)
+            date_only_tasks = [t for t in self.tasks if t.created_date == date_str]
+
+            if source_index < 0 or source_index >= len(date_only_tasks):
+                print(f"잘못된 소스 인덱스: {source_index}, 작업 수: {len(date_only_tasks)}")
+                return False
+            if target_index < 0 or target_index >= len(date_only_tasks):
+                print(f"잘못된 타겟 인덱스: {target_index}, 작업 수: {len(date_only_tasks)}")
+                return False
+
+            print(f"순서 변경 전 작업 순서:")
+            for i, task in enumerate(date_only_tasks):
+                print(f"  {i}: {task.title} (order: {getattr(task, 'order', 'None')})")
+
+            # 실제 순서 변경 - 원본 tasks 리스트에서 직접 수행
+            # 1. 이동할 작업과 대상 작업의 실제 인덱스 찾기
+            source_task = date_only_tasks[source_index]
+            target_task = date_only_tasks[target_index]
+
+            # 2. 전체 tasks 리스트에서 실제 인덱스 찾기
+            source_real_index = -1
+            target_real_index = -1
+
+            for i, task in enumerate(self.tasks):
+                if task.id == source_task.id:
+                    source_real_index = i
+                if task.id == target_task.id:
+                    target_real_index = i
+
+            if source_real_index == -1 or target_real_index == -1:
+                print(f"실제 인덱스를 찾을 수 없음: source={source_real_index}, target={target_real_index}")
+                return False
+
+            # 3. 실제 tasks 리스트에서 순서 변경
+            moved_task = self.tasks.pop(source_real_index)
+
+            # target_real_index 조정 (source가 target보다 앞에 있었다면)
+            if source_real_index < target_real_index:
+                target_real_index -= 1
+
+            self.tasks.insert(target_real_index, moved_task)
+
+            # 4. 해당 날짜의 모든 작업의 order 필드 재계산
+            updated_date_tasks = [t for t in self.tasks if t.created_date == date_str]
+            for i, task in enumerate(updated_date_tasks):
+                task.order = i + 1
+
+            print(f"순서 변경 후 작업 순서:")
+            for i, task in enumerate(updated_date_tasks):
+                print(f"  {i}: {task.title} (order: {getattr(task, 'order', 'None')})")
+
+            self.tasks_changed = True
+            print(f"작업 순서 변경 완료: {source_index} -> {target_index}")
+            return True
+
+        except Exception as e:
+            print(f"작업 순서 변경 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def get_tasks_by_date(self, date_str):
-        """특정 날짜의 작업 목록 조회
+        """특정 날짜의 작업 목록 조회 (순서대로 정렬)
 
         Args:
             date_str (str): 조회할 날짜 (YYYY-MM-DD)
@@ -131,14 +226,30 @@ class StorageManager:
         # 해당 날짜의 작업
         date_tasks = [task for task in self.tasks if task.created_date == date_str]
 
+        # order 필드가 없는 경우 추가
+        for i, task in enumerate(date_tasks):
+            if not hasattr(task, 'order') or task.order is None:
+                task.order = i + 1
+
+        # order 순으로 정렬 (order가 없으면 999로 처리하여 뒤로)
+        date_tasks.sort(key=lambda x: getattr(x, 'order', 999))
+
+        print(f"날짜 {date_str}의 작업 순서:")
+        for i, task in enumerate(date_tasks):
+            print(f"  위치 {i}: {task.title} (order: {getattr(task, 'order', 'None')})")
+
         # 다른 날짜의 중요 미완료 작업
         important_tasks = [
             task for task in self.tasks
             if task.created_date != date_str and task.important and not task.completed
         ]
 
-        # 중요 작업을 먼저 정렬하고, 그 다음 일반 작업 정렬
-        return sorted(date_tasks + important_tasks, key=lambda x: (not x.important, x.completed))
+        # 다른 날짜의 중요 작업에도 임시 order 할당 (음수로 구분)
+        for i, task in enumerate(important_tasks):
+            task.temp_order = -(i + 1)  # 음수로 설정하여 맨 앞에 표시
+
+        # 중요 작업을 먼저, 그 다음 해당 날짜 작업 (order 순서 유지)
+        return important_tasks + date_tasks
 
     def add_category(self, category):
         """카테고리 추가

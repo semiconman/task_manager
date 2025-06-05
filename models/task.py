@@ -20,7 +20,7 @@ class Task:
     }
 
     def __init__(self, title, content="", category="ETC", important=False, completed=False, created_date=None,
-                 bg_color="none"):
+                 bg_color="none", order=None):
         """작업 초기화
 
         Args:
@@ -31,6 +31,7 @@ class Task:
             completed (bool, optional): 완료 여부. 기본값은 False
             created_date (str, optional): 작업 생성 날짜(YYYY-MM-DD). 기본값은 현재 날짜
             bg_color (str, optional): 배경색 코드. 기본값은 "none" (흰색)
+            order (int, optional): 작업 순서. 기본값은 None (자동 할당)
         """
         try:
             self.id = uuid.uuid4().hex  # 고유 ID
@@ -41,6 +42,7 @@ class Task:
             self.important = bool(important)  # 중요 여부를 bool 타입으로 강제 변환
             self.completed = bool(completed)  # 완료 여부를 bool 타입으로 강제 변환
             self.bg_color = bg_color if bg_color in self.BG_COLORS else "none"  # 배경색 설정
+            self.order = order  # 작업 순서 (None이면 자동 할당)
         except Exception as e:
             print(f"작업 객체 생성 중 오류 발생: {e}")
             # 기본값으로 초기화
@@ -52,6 +54,7 @@ class Task:
             self.important = False
             self.completed = False
             self.bg_color = "none"
+            self.order = None
 
     def to_dict(self):
         """Task 객체를 딕셔너리로 변환 (JSON 저장용)"""
@@ -64,7 +67,8 @@ class Task:
                 "created_date": self.created_date,
                 "important": self.important,
                 "completed": self.completed,
-                "bg_color": self.bg_color
+                "bg_color": self.bg_color,
+                "order": getattr(self, 'order', None)  # order 필드 추가
             }
         except Exception as e:
             print(f"작업 딕셔너리 변환 중 오류 발생: {e}")
@@ -77,7 +81,8 @@ class Task:
                 "created_date": self.created_date,
                 "important": False,
                 "completed": False,
-                "bg_color": "none"
+                "bg_color": "none",
+                "order": None
             }
 
     @classmethod
@@ -104,7 +109,8 @@ class Task:
                 important=data.get("important", False),
                 completed=data.get("completed", False),
                 created_date=data.get("created_date"),
-                bg_color=data.get("bg_color", "none")
+                bg_color=data.get("bg_color", "none"),
+                order=data.get("order")  # order 필드 추가
             )
 
             # ID 설정
