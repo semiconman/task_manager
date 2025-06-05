@@ -1,0 +1,333 @@
+/* MacOS 스타일 QSS 파일 */
+
+/* 전체 앱 스타일 */
+QWidget {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    color: #333333;
+    background-color: #FFFFFF;
+}
+
+/* 메인 윈도우 스타일 */
+QMainWindow {
+    background-color: #F5F5F5;
+}
+
+/* 메뉴바 스타일 */
+QMenuBar {
+    background-color: #F5F5F5;
+    border-bottom: 1px solid #E0E0E0;
+    padding: 2px;
+}
+
+QMenuBar::item {
+    padding: 4px 10px;
+    background: transparent;
+    border-radius: 4px;
+}
+
+QMenuBar::item:selected {
+    background-color: #E0E0E0;
+}
+
+QMenu {
+    background-color: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 5px;
+    padding: 5px;
+}
+
+QMenu::item {
+    padding: 6px 25px 6px 20px;
+    border-radius: 3px;
+}
+
+QMenu::item:selected {
+    background-color: #0066CC;
+    color: #FFFFFF;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #E0E0E0;
+    margin: 5px;
+}
+
+/* 버튼 스타일 */
+QPushButton {
+    background-color: #F5F5F5;
+    border: 1px solid #D0D0D0;
+    border-radius: 6px;
+    padding: 5px 15px;
+    min-height: 25px;
+}
+
+QPushButton:hover {
+    background-color: #E6E6E6;
+}
+
+QPushButton:pressed {
+    background-color: #D6D6D6;
+}
+
+QPushButton:disabled {
+    background-color: #F5F5F5;
+    color: #AAAAAA;
+    border-color: #E0E0E0;
+}
+
+/* 체크박스 스타일 */
+QCheckBox {
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #CCCCCC;
+    border-radius: 3px;
+    background-color: #FFFFFF;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #0066CC;
+    border-color: #0066CC;
+    image: url(resources/icons/check.png);
+}
+
+QCheckBox::indicator:hover {
+    border-color: #0066CC;
+}
+
+/* 라디오 버튼 스타일 */
+QRadioButton {
+    spacing: 8px;
+}
+
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #CCCCCC;
+    border-radius: 9px;
+    background-color: #FFFFFF;
+}
+
+QRadioButton::indicator:checked {
+    background-color: #0066CC;
+    border-color: #0066CC;
+    image: url(resources/icons/radio_check.png);
+}
+
+QRadioButton::indicator:hover {
+    border-color: #0066CC;
+}
+
+/* 입력 필드 스타일 */
+QLineEdit, QTextEdit, QComboBox {
+    border: 1px solid #CCCCCC;
+    border-radius: 5px;
+    padding: 5px;
+    background-color: #FFFFFF;
+    selection-background-color: #0066CC;
+    selection-color: #FFFFFF;
+}
+
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
+    border-color: #0066CC;
+}
+
+QComboBox::drop-down {
+    border: 0;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    image: url(resources/icons/dropdown.png);
+}
+
+/* 스크롤바 스타일 */
+QScrollBar:vertical {
+    border: none;
+    background-color: #F0F0F0;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #CCCCCC;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #AAAAAA;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+    border: none;
+    background: none;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background-color: #F0F0F0;
+    height: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #CCCCCC;
+    min-width: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #AAAAAA;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+    border: none;
+    background: none;
+}
+
+/* 탭 위젯 스타일 */
+QTabWidget::pane {
+    border: 1px solid #E0E0E0;
+    border-radius: 5px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background-color: #F5F5F5;
+    border: 1px solid #E0E0E0;
+    border-bottom: none;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    padding: 5px 10px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #FFFFFF;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #E6E6E6;
+}
+
+/* 달력 위젯 스타일 */
+QCalendarWidget {
+    border: 1px solid #E0E0E0;
+    border-radius: 5px;
+}
+
+QCalendarWidget QToolButton {
+    background-color: #F5F5F5;
+    border: 1px solid #E0E0E0;
+    border-radius: 3px;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: #E6E6E6;
+}
+
+QCalendarWidget QAbstractItemView {
+    selection-background-color: #0066CC;
+    selection-color: #FFFFFF;
+}
+
+/* 그룹박스 스타일 */
+QGroupBox {
+    border: 1px solid #E0E0E0;
+    border-radius: 5px;
+    margin-top: 10px;
+    padding-top: 10px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 5px;
+    background-color: #FFFFFF;
+}
+
+/* 다이얼로그 버튼 박스 스타일 */
+QDialogButtonBox {
+    button-layout: 2;  /* Mac 스타일 버튼 순서 */
+}
+
+/* 스플리터 스타일 */
+QSplitter::handle {
+    background-color: #E0E0E0;
+}
+
+QSplitter::handle:horizontal {
+    width: 1px;
+}
+
+QSplitter::handle:vertical {
+    height: 1px;
+}
+
+/* 헤더 스타일 */
+QHeaderView::section {
+    background-color: #F5F5F5;
+    padding: 5px;
+    border: 1px solid #E0E0E0;
+    border-left: 0;
+    border-top: 0;
+}
+
+/* 툴팁 스타일 */
+QToolTip {
+    background-color: #333333;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 3px;
+    padding: 5px;
+}
+
+/* 작업 리스트 아이템 스타일 */
+QFrame#TaskItemWidget {
+    border: 1px solid #E0E0E0;
+    border-radius: 5px;
+    background-color: #FFFFFF;
+    margin: 2px;
+}
+
+/* 중요 작업 스타일 */
+QFrame#ImportantTaskItem {
+    background-color: #FFF8E1;
+    border: 1px solid #FFE082;
+}
+
+/* 완료된 작업 스타일 */
+QFrame#CompletedTaskItem {
+    background-color: #F5F5F5;
+}
+
+/* 작업 추가 버튼 스타일 */
+QPushButton#AddTaskButton {
+    background-color: #0066CC;
+    color: #FFFFFF;
+    border: none;
+}
+
+QPushButton#AddTaskButton:hover {
+    background-color: #0056AD;
+}
+
+QPushButton#AddTaskButton:pressed {
+    background-color: #004A93;
+}
+
+/* 날짜 라벨 스타일 */
+QLabel#DateLabel {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333333;
+}
