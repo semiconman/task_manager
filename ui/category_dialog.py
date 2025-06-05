@@ -204,9 +204,12 @@ class CategoryDialog(QDialog):
         """선택된 색상 코드 반환"""
         for color_hex, radio in self.color_radios.items():
             if radio.isChecked():
+                print(f"선택된 색상: {color_hex}")
                 return color_hex
         # 기본값 반환
-        return list(self.COLOR_SAMPLES.values())[0]
+        default_color = list(self.COLOR_SAMPLES.values())[0]
+        print(f"기본 색상 사용: {default_color}")
+        return default_color
 
     def add_category(self):
         """새 카테고리 추가"""
@@ -226,6 +229,7 @@ class CategoryDialog(QDialog):
 
             # 선택한 색상 가져오기
             color = self.get_selected_color()
+            print(f"새 카테고리 추가: 이름={name}, 색상={color}")
 
             # 새 카테고리 추가
             new_category = Category(name, color)
@@ -233,14 +237,23 @@ class CategoryDialog(QDialog):
             self.storage_manager.add_category(new_category)
             self.storage_manager.categories_changed = True
 
+            # 즉시 저장
+            self.storage_manager.save_data()
+            print("카테고리 데이터 즉시 저장 완료")
+
             # 목록 새로고침
             self.load_categories()
 
             # 입력 필드 초기화
             self.name_edit.clear()
             self.name_edit.setFocus()
+
+            QMessageBox.information(self, "성공", f"카테고리 '{name}'이 추가되었습니다.")
+
         except Exception as e:
             print(f"카테고리 추가 중 오류 발생: {e}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.warning(self, "오류", f"카테고리 추가 중 오류가 발생했습니다: {e}")
 
     def delete_category(self):
@@ -273,7 +286,12 @@ class CategoryDialog(QDialog):
             if reply == QMessageBox.StandardButton.Yes:
                 # 카테고리 삭제
                 if self.storage_manager.delete_category(category.name):
+                    # 즉시 저장
+                    self.storage_manager.save_data()
                     self.load_categories()
+                    QMessageBox.information(self, "성공", f"카테고리 '{category.name}'이 삭제되었습니다.")
         except Exception as e:
             print(f"카테고리 삭제 중 오류 발생: {e}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.warning(self, "오류", f"카테고리 삭제 중 오류가 발생했습니다: {e}")

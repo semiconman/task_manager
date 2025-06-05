@@ -18,17 +18,19 @@ class TaskItemWidget(QFrame):
     edit_task = pyqtSignal(str)  # 작업 편집 요청 (id)
     delete_task = pyqtSignal(str)  # 작업 삭제 요청 (id)
 
-    def __init__(self, task, current_date):
+    def __init__(self, task, current_date, storage_manager=None):
         """작업 항목 위젯 초기화
 
         Args:
             task (Task): 표시할 작업 객체
             current_date (str): 현재 선택된 날짜
+            storage_manager (StorageManager): 스토리지 매니저 (카테고리 색상 참조용)
         """
         super().__init__()
 
         self.task = task
         self.current_date = current_date
+        self.storage_manager = storage_manager  # 추가
         self.drag_start_position = QPoint()  # 드래그 시작 위치 초기화
 
         # 스타일 설정 - PyQt6 호환성 수정
@@ -278,13 +280,24 @@ class TaskItemWidget(QFrame):
 
     def get_category_color(self):
         """작업 카테고리에 해당하는 색상 반환"""
-        category_colors = {
+        # StorageManager에서 카테고리 정보 가져오기
+        if self.storage_manager:
+            for category in self.storage_manager.categories:
+                if category.name == self.task.category:
+                    print(f"카테고리 '{self.task.category}' 색상 찾음: {category.color}")
+                    return category.color
+
+        # StorageManager가 없거나 카테고리를 찾지 못한 경우 기본 색상 사용
+        default_colors = {
             "LB": "#4285F4",  # 파란색
             "Tester": "#FBBC05",  # 노란색
             "Handler": "#34A853",  # 녹색
             "ETC": "#EA4335"  # 빨간색
         }
-        return category_colors.get(self.task.category, "#9E9E9E")  # 기본값은 회색
+
+        color = default_colors.get(self.task.category, "#9E9E9E")  # 기본값은 회색
+        print(f"카테고리 '{self.task.category}' 기본 색상 사용: {color}")
+        return color
 
     def on_complete_toggled(self, checked):
         """완료 상태 변경 처리"""
@@ -550,7 +563,8 @@ class TaskListWidget(QScrollArea):
                 # 작업 위젯 추가
                 for task in tasks:
                     try:
-                        task_widget = TaskItemWidget(task, current_date)
+                        # storage_manager를 TaskItemWidget에 전달
+                        task_widget = TaskItemWidget(task, current_date, self.storage_manager)
 
                         # 시그널 연결
                         task_widget.task_toggled.connect(self.on_task_toggled)
