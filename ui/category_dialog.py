@@ -254,7 +254,8 @@ class TemplateWidget(QWidget):
         reply = QMessageBox.question(
             self, "템플릿 삭제",
             f"'{template_title}' 템플릿을 삭제하시겠습니까?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes  # 기본값을 Yes로 설정
         )
 
         if reply == QMessageBox.StandardButton.Yes:
@@ -578,7 +579,7 @@ class CategoryDialog(QDialog):
                 f"'{category.name}' 카테고리를 삭제하시겠습니까?\n\n"
                 f"이 카테고리를 사용하는 모든 작업은 'ETC' 카테고리로 변경됩니다.{template_info}",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                QMessageBox.StandardButton.Yes  # 기본값을 Yes로 설정
             )
 
             if reply == QMessageBox.StandardButton.Yes:

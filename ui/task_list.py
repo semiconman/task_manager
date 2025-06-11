@@ -671,7 +671,7 @@ class TaskListWidget(QScrollArea):
                 "작업 삭제",
                 "이 작업을 삭제하시겠습니까?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                QMessageBox.StandardButton.Yes
             )
 
             if reply == QMessageBox.StandardButton.Yes:

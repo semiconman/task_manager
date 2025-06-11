@@ -32,7 +32,9 @@ class TaskForm(QDialog):
 
         # 대화상자 설정
         self.setWindowTitle("작업 편집" if self.edit_mode else "새 작업")
-        self.setMinimumWidth(500)  # 템플릿 섹션을 위해 폭 증가
+        self.setMinimumWidth(600)  # 가로 크기 증가
+        self.setMinimumHeight(500)  # 세로 크기 제한
+        self.setMaximumHeight(600)  # 최대 높이 제한
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         # UI 초기화
@@ -47,6 +49,12 @@ class TaskForm(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
 
+        # 상단 영역: 기본 정보
+        top_layout = QHBoxLayout()
+
+        # 좌측: 기본 입력 필드들
+        left_layout = QVBoxLayout()
+
         # 제목 입력
         title_layout = QVBoxLayout()
         title_label = QLabel("제목:")
@@ -56,7 +64,7 @@ class TaskForm(QDialog):
 
         title_layout.addWidget(title_label)
         title_layout.addWidget(self.title_edit)
-        layout.addLayout(title_layout)
+        left_layout.addLayout(title_layout)
 
         # 내용 입력
         content_layout = QVBoxLayout()
@@ -64,18 +72,19 @@ class TaskForm(QDialog):
         content_label.setStyleSheet("font-weight: bold;")
         self.content_edit = QTextEdit()
         self.content_edit.setPlaceholderText("작업 내용을 입력하세요 (선택사항)")
-        self.content_edit.setMinimumHeight(100)
+        self.content_edit.setMinimumHeight(80)  # 높이 줄임
+        self.content_edit.setMaximumHeight(100)
 
         content_layout.addWidget(content_label)
         content_layout.addWidget(self.content_edit)
-        layout.addLayout(content_layout)
+        left_layout.addLayout(content_layout)
 
-        # 날짜 선택 필드 추가
+        # 날짜 선택 필드
         date_layout = QVBoxLayout()
         date_label = QLabel("날짜:")
         date_label.setStyleSheet("font-weight: bold;")
         self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)  # 달력 팝업 활성화
+        self.date_edit.setCalendarPopup(True)
 
         # 현재 선택된 날짜로 설정
         try:
@@ -86,7 +95,7 @@ class TaskForm(QDialog):
 
         date_layout.addWidget(date_label)
         date_layout.addWidget(self.date_edit)
-        layout.addLayout(date_layout)
+        left_layout.addLayout(date_layout)
 
         # 카테고리 선택
         category_layout = QVBoxLayout()
@@ -94,25 +103,80 @@ class TaskForm(QDialog):
         category_label.setStyleSheet("font-weight: bold;")
         self.category_combo = QComboBox()
 
-        # 카테고리 목록 로드 - 보호 코드 추가
+        # 카테고리 목록 로드
         if hasattr(self.storage_manager, 'categories') and self.storage_manager.categories:
             for category in self.storage_manager.categories:
                 self.category_combo.addItem(category.name)
         else:
-            # 기본 카테고리 추가
             default_categories = ["LB", "Tester", "Handler", "ETC"]
             for cat_name in default_categories:
                 self.category_combo.addItem(cat_name)
 
-        # 기본값 설정
         if self.category_combo.count() == 0:
             self.category_combo.addItem("ETC")
 
         category_layout.addWidget(category_label)
         category_layout.addWidget(self.category_combo)
-        layout.addLayout(category_layout)
+        left_layout.addLayout(category_layout)
 
-        # 템플릿 선택 영역 (새로운 기능)
+        # 중요 여부
+        self.important_check = QCheckBox("중요 작업으로 표시")
+        left_layout.addWidget(self.important_check)
+
+        top_layout.addLayout(left_layout)
+
+        # 우측: 배경색 선택
+        right_layout = QVBoxLayout()
+
+        # 배경색 선택 그룹박스
+        color_group = QGroupBox("배경색")
+        color_layout = QVBoxLayout(color_group)
+
+        # 색상 선택 라디오 버튼
+        self.color_radio_group = QButtonGroup(self)
+        self.color_radios = {}
+
+        # 색상 정보 (더 컴팩트하게)
+        colors = {
+            "none": "없음",
+            "red": "빨강",
+            "orange": "주황",
+            "yellow": "노랑",
+            "green": "초록",
+            "blue": "파랑",
+            "purple": "보라"
+        }
+
+        # 라디오 버튼 생성 (더 작게)
+        for color_code, color_name in colors.items():
+            radio = QRadioButton(color_name)
+
+            if color_code != "none":
+                bg_color = Task.BG_COLORS.get(color_code, "#FFFFFF")
+                radio.setStyleSheet(f"""
+                    QRadioButton {{
+                        background-color: {bg_color};
+                        padding: 3px;
+                        border-radius: 3px;
+                        font-size: 11px;
+                    }}
+                """)
+
+            self.color_radio_group.addButton(radio)
+            self.color_radios[color_code] = radio
+            color_layout.addWidget(radio)
+
+        # 기본값은 '없음'
+        self.color_radios["none"].setChecked(True)
+
+        right_layout.addWidget(color_group)
+        right_layout.addStretch()  # 남은 공간 채우기
+
+        top_layout.addLayout(right_layout)
+
+        layout.addLayout(top_layout)
+
+        # 템플릿 선택 영역
         self.template_group = QGroupBox("템플릿 사용 (선택사항)")
         template_layout = QVBoxLayout(self.template_group)
 
@@ -121,11 +185,11 @@ class TaskForm(QDialog):
         template_layout.addWidget(template_info_label)
 
         self.template_list = QListWidget()
-        self.template_list.setMaximumHeight(120)
+        self.template_list.setMaximumHeight(100)  # 높이 줄임
         self.template_list.itemClicked.connect(self.on_template_selected)
         template_layout.addWidget(self.template_list)
 
-        # 템플릿 초기화 버튼
+        # 템플릿 버튼들
         template_button_layout = QHBoxLayout()
         self.apply_template_btn = QPushButton("선택한 템플릿 적용")
         self.apply_template_btn.clicked.connect(self.apply_selected_template)
@@ -139,53 +203,6 @@ class TaskForm(QDialog):
         template_layout.addLayout(template_button_layout)
 
         layout.addWidget(self.template_group)
-
-        # 배경색 선택 그룹박스
-        color_group = QGroupBox("배경색 선택")
-        color_layout = QVBoxLayout(color_group)
-
-        # 색상 선택 라디오 버튼
-        self.color_radio_group = QButtonGroup(self)
-        self.color_radios = {}
-
-        # 색상 정보
-        colors = {
-            "none": "없음 (흰색)",
-            "red": "빨간색",
-            "orange": "주황색",
-            "yellow": "노란색",
-            "green": "초록색",
-            "blue": "파란색",
-            "purple": "보라색"
-        }
-
-        # 라디오 버튼 생성 및 스타일 적용
-        for color_code, color_name in colors.items():
-            radio = QRadioButton(color_name)
-
-            if color_code != "none":
-                # 배경색 설정
-                bg_color = Task.BG_COLORS.get(color_code, "#FFFFFF")
-                radio.setStyleSheet(f"""
-                    QRadioButton {{
-                        background-color: {bg_color};
-                        padding: 5px;
-                        border-radius: 3px;
-                    }}
-                """)
-
-            self.color_radio_group.addButton(radio)
-            self.color_radios[color_code] = radio
-            color_layout.addWidget(radio)
-
-        # 기본값은 '없음'
-        self.color_radios["none"].setChecked(True)
-
-        layout.addWidget(color_group)
-
-        # 중요 여부
-        self.important_check = QCheckBox("중요 작업으로 표시")
-        layout.addWidget(self.important_check)
 
         # 버튼
         button_box = QDialogButtonBox(
