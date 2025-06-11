@@ -25,6 +25,9 @@ class StorageManager:
         self.tasks = self._load_tasks()
         self.categories = self._load_categories()
 
+        # ETC 카테고리 존재 확인
+        self.ensure_etc_category()
+
         # 변경 감지 플래그
         self.tasks_changed = False
         self.categories_changed = False
@@ -47,23 +50,49 @@ class StorageManager:
             try:
                 with open(self.categories_file, "r", encoding="utf-8") as f:
                     categories_data = json.load(f)
-                return [Category.from_dict(cat_dict) for cat_dict in categories_data]
+
+                print(f"로드된 카테고리 데이터: {categories_data}")  # 디버그용
+
+                categories = [Category.from_dict(cat_dict) for cat_dict in categories_data]
+
+                # 기존 카테고리들에 templates 속성이 없으면 추가
+                for category in categories:
+                    if not hasattr(category, 'templates'):
+                        category.templates = []
+                        print(f"카테고리 '{category.name}'에 빈 templates 추가")
+
+                print("카테고리 로드 완료:")
+                for category in categories:
+                    template_count = len(getattr(category, 'templates', []))
+                    print(f"  카테고리 '{category.name}': 템플릿 {template_count}개")
+
+                return categories
             except (json.JSONDecodeError, KeyError) as e:
                 print(f"카테고리 데이터 로드 중 오류 발생: {e}")
                 # 기본 카테고리 반환
                 return Category.get_default_categories()
         # 파일이 없으면 기본 카테고리 반환
+        print("카테고리 파일이 없어 기본 카테고리 생성")
         return Category.get_default_categories()
 
     def save_data(self):
         """변경된 데이터가 있는 경우 저장"""
-        if self.tasks_changed:
-            self._save_tasks()
-            self.tasks_changed = False
+        try:
+            if self.tasks_changed:
+                print("작업 데이터 저장 중...")
+                self._save_tasks()
+                self.tasks_changed = False
+                print("작업 데이터 저장 완료")
 
-        if self.categories_changed:
-            self._save_categories()
-            self.categories_changed = False
+            if self.categories_changed:
+                print("카테고리 데이터 저장 중...")
+                self._save_categories()
+                self.categories_changed = False
+                print("카테고리 데이터 저장 완료")
+        except Exception as e:
+            print(f"데이터 저장 중 오류 발생: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _save_tasks(self):
         """작업 데이터 저장"""
@@ -73,9 +102,50 @@ class StorageManager:
 
     def _save_categories(self):
         """카테고리 데이터 저장"""
-        categories_data = [cat.to_dict() for cat in self.categories]
-        with open(self.categories_file, "w", encoding="utf-8") as f:
-            json.dump(categories_data, f, ensure_ascii=False, indent=2)
+        try:
+            print("카테고리 저장 시작:")
+            for category in self.categories:
+                template_count = len(getattr(category, 'templates', []))
+                print(f"  카테고리 '{category.name}': 템플릿 {template_count}개")
+                if template_count > 0:
+                    print(f"    템플릿 목록: {[t.get('title', 'No Title') for t in category.templates]}")
+
+            categories_data = []
+            for cat in self.categories:
+                cat_dict = cat.to_dict()
+                categories_data.append(cat_dict)
+
+            print(f"저장할 전체 카테고리 데이터:")
+            for i, cat_data in enumerate(categories_data):
+                print(f"  {i}: {cat_data}")
+
+            # 디렉토리 존재 확인
+            os.makedirs(self.data_dir, exist_ok=True)
+
+            with open(self.categories_file, "w", encoding="utf-8") as f:
+                json.dump(categories_data, f, ensure_ascii=False, indent=2)
+
+            print(f"카테고리 데이터 파일 저장 완료: {self.categories_file}")
+
+            # 저장 후 파일 검증
+            if os.path.exists(self.categories_file):
+                file_size = os.path.getsize(self.categories_file)
+                print(f"저장된 파일 크기: {file_size} bytes")
+
+                # 파일 내용 재확인
+                with open(self.categories_file, "r", encoding="utf-8") as f:
+                    saved_data = json.load(f)
+                print(f"저장 후 검증 - 카테고리 수: {len(saved_data)}")
+                for cat_data in saved_data:
+                    template_count = len(cat_data.get('templates', []))
+                    print(f"  검증: '{cat_data['name']}' - 템플릿 {template_count}개")
+            else:
+                print("경고: 파일이 저장되지 않았습니다!")
+
+        except Exception as e:
+            print(f"카테고리 저장 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
 
     def add_task(self, task):
         """작업 추가
@@ -269,9 +339,8 @@ class StorageManager:
         Returns:
             bool: 삭제 성공 여부
         """
-        # 기본 카테고리는 삭제 불가
-        default_names = ["LB", "Tester", "Handler", "ETC"]
-        if category_name in default_names:
+        # ETC 카테고리는 삭제 불가
+        if category_name == "ETC":
             return False
 
         for i, category in enumerate(self.categories):
@@ -286,6 +355,58 @@ class StorageManager:
                 self.categories_changed = True
                 return True
         return False
+
+    def reorder_categories(self, source_index, target_index):
+        """카테고리 순서 변경
+
+        Args:
+            source_index (int): 원본 인덱스
+            target_index (int): 대상 인덱스
+
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            if source_index < 0 or source_index >= len(self.categories):
+                print(f"잘못된 소스 인덱스: {source_index}, 카테고리 수: {len(self.categories)}")
+                return False
+            if target_index < 0 or target_index >= len(self.categories):
+                print(f"잘못된 타겟 인덱스: {target_index}, 카테고리 수: {len(self.categories)}")
+                return False
+            if source_index == target_index:
+                return True
+
+            print(f"카테고리 순서 변경: {source_index} -> {target_index}")
+            print(f"변경 전 순서:")
+            for i, cat in enumerate(self.categories):
+                print(f"  {i}: {cat.name}")
+
+            # 카테고리 순서 변경
+            moved_category = self.categories.pop(source_index)
+            self.categories.insert(target_index, moved_category)
+
+            print(f"변경 후 순서:")
+            for i, cat in enumerate(self.categories):
+                print(f"  {i}: {cat.name}")
+
+            self.categories_changed = True
+            return True
+
+        except Exception as e:
+            print(f"카테고리 순서 변경 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def ensure_etc_category(self):
+        """ETC 카테고리가 존재하는지 확인하고 없으면 생성"""
+        etc_exists = any(cat.name == "ETC" for cat in self.categories)
+        if not etc_exists:
+            from models.category import Category
+            etc_category = Category("ETC", "#EA4335")
+            self.categories.append(etc_category)
+            self.categories_changed = True
+            print("ETC 카테고리가 자동으로 생성되었습니다.")
 
     def get_task_stats(self, date_str):
         """특정 날짜의 작업 통계 조회

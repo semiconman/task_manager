@@ -1,0 +1,52 @@
+
+
+Error Time: 2025-06-10 14:34:31.767623
+Exception Type: AttributeError
+Exception Value: 'TaskForm' object has no attribute 'template_list'
+Traceback:
+  File "C:\Users\20198\PycharmProjects\Task_manager\ui\task_form.py", line 206, in on_category_changed
+    self.load_templates()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\20198\PycharmProjects\Task_manager\ui\task_form.py", line 210, in load_templates
+    self.template_list.clear()
+    ^^^^^^^^^^^^^^^^^^
+
+
+
+Error Time: 2025-06-10 14:34:31.767623
+Exception Type: AttributeError
+Exception Value: 'TaskForm' object has no attribute 'template_list'
+Traceback:
+  File "C:\Users\20198\PycharmProjects\Task_manager\ui\task_form.py", line 206, in on_category_changed
+    self.load_templates()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\20198\PycharmProjects\Task_manager\ui\task_form.py", line 210, in load_templates
+    self.template_list.clear()
+    ^^^^^^^^^^^^^^^^^^
+
+
+
+Error Time: 2025-06-10 14:34:31.767623
+Exception Type: AttributeError
+Exception Value: 'TaskForm' object has no attribute 'template_list'
+Traceback:
+  File "C:\Users\20198\PycharmProjects\Task_manager\ui\task_form.py", line 206, in on_category_changed
+    self.load_templates()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\20198\PycharmProjects\Task_manager\ui\task_form.py", line 210, in load_templates
+    self.template_list.clear()
+    ^^^^^^^^^^^^^^^^^^
+
+
+
+Error Time: 2025-06-10 14:34:31.767623
+Exception Type: AttributeError
+Exception Value: 'TaskForm' object has no attribute 'template_list'
+Traceback:
+  File "C:\Users\20198\PycharmProjects\Task_manager\ui\task_form.py", line 206, in on_category_changed
+    self.load_templates()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\20198\PycharmProjects\Task_manager\ui\task_form.py", line 210, in load_templates
+    self.template_list.clear()
+    ^^^^^^^^^^^^^^^^^^
+

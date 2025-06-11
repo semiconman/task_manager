@@ -7,10 +7,10 @@ VERSION = "1.31"
 DESCRIPTION = "Todolist_PM_Ver1.31"
 AUTHOR = "YoungJun_Ahn"
 
-# 콘솔창 완전 숨김 설정
+# 콘솔창 숨김 설정 (Windows)
 base = None
 if sys.platform == "win32":
-    base = "Win32GUI"  # Windows에서 콘솔창 숨김
+    base = "Win32GUI"
 
 # 빌드 옵션 설정
 build_options = {
@@ -24,30 +24,16 @@ build_options = {
     ],
 
     # 빌드 폴더 지정
-    "build_exe": f"build/{APP_NAME}",
-
-    # 콘솔 출력 완전 차단 옵션들
-    "silent": True,
-    "optimize": 2,
-
-    # 불필요한 모듈 제외 (크기 줄이기 + 안정성)
-    "excludes": [
-        "tkinter", "unittest", "email", "html", "http", "urllib",
-        "xml", "pydoc", "doctest", "argparse", "difflib"
-    ]
+    "build_exe": f"build/{APP_NAME}"
 }
 
 # 실행 파일 설정
 executables = [
     Executable(
         script="main.py",  # 메인 파이썬 파일
-        base=base,  # GUI 모드 (콘솔창 완전 숨김)
+        base=base,  # GUI 모드 (콘솔창 숨김)
         target_name=f"{APP_NAME}.exe",  # 실행 파일 이름
-        icon="resources/icons/app_icon.ico" if sys.platform == "win32" else None,  # 아이콘
-
-        # 추가 콘솔 숨김 옵션들
-        copyright="Copyright (C) 2024 YoungJun_Ahn",
-        trademarks="Todolist PM"
+        icon="resources/icons/app_icon.ico" if sys.platform == "win32" else None  # 아이콘 (있는 경우)
     )
 ]
 
@@ -56,7 +42,6 @@ setup(
     name=APP_NAME,
     version=VERSION,
     description=DESCRIPTION,
-    author=AUTHOR,
     options={"build_exe": build_options},
     executables=executables
 )

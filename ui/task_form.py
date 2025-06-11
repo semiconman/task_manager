@@ -4,7 +4,7 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QTextEdit, QComboBox, QCheckBox, QPushButton, QDialogButtonBox,
-    QDateEdit, QGroupBox, QRadioButton, QButtonGroup
+    QDateEdit, QGroupBox, QRadioButton, QButtonGroup, QListWidget, QListWidgetItem, QFrame
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QIcon, QColor
@@ -32,7 +32,7 @@ class TaskForm(QDialog):
 
         # 대화상자 설정
         self.setWindowTitle("작업 편집" if self.edit_mode else "새 작업")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(500)  # 템플릿 섹션을 위해 폭 증가
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         # UI 초기화
@@ -112,6 +112,34 @@ class TaskForm(QDialog):
         category_layout.addWidget(self.category_combo)
         layout.addLayout(category_layout)
 
+        # 템플릿 선택 영역 (새로운 기능)
+        self.template_group = QGroupBox("템플릿 사용 (선택사항)")
+        template_layout = QVBoxLayout(self.template_group)
+
+        template_info_label = QLabel("해당 카테고리의 템플릿을 선택하면 제목과 내용이 자동으로 입력됩니다.")
+        template_info_label.setStyleSheet("color: #666666; font-size: 11px;")
+        template_layout.addWidget(template_info_label)
+
+        self.template_list = QListWidget()
+        self.template_list.setMaximumHeight(120)
+        self.template_list.itemClicked.connect(self.on_template_selected)
+        template_layout.addWidget(self.template_list)
+
+        # 템플릿 초기화 버튼
+        template_button_layout = QHBoxLayout()
+        self.apply_template_btn = QPushButton("선택한 템플릿 적용")
+        self.apply_template_btn.clicked.connect(self.apply_selected_template)
+        self.apply_template_btn.setEnabled(False)
+
+        self.clear_form_btn = QPushButton("양식 초기화")
+        self.clear_form_btn.clicked.connect(self.clear_form_fields)
+
+        template_button_layout.addWidget(self.apply_template_btn)
+        template_button_layout.addWidget(self.clear_form_btn)
+        template_layout.addLayout(template_button_layout)
+
+        layout.addWidget(self.template_group)
+
         # 배경색 선택 그룹박스
         color_group = QGroupBox("배경색 선택")
         color_layout = QVBoxLayout(color_group)
@@ -169,6 +197,101 @@ class TaskForm(QDialog):
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
+        # 카테고리 변경 시 템플릿 업데이트 - 모든 UI 요소가 생성된 후에 연결
+        self.category_combo.currentTextChanged.connect(self.on_category_changed)
+
+        # 초기 템플릿 로드
+        self.load_templates()
+
+    def on_category_changed(self, category_name):
+        """카테고리 변경 시 템플릿 목록 업데이트"""
+        self.load_templates()
+
+    def load_templates(self):
+        """현재 선택된 카테고리의 템플릿 목록 로드"""
+        self.template_list.clear()
+        self.apply_template_btn.setEnabled(False)
+
+        current_category_name = self.category_combo.currentText()
+        if not current_category_name:
+            return
+
+        # 해당 카테고리 찾기
+        current_category = None
+        for category in self.storage_manager.categories:
+            if category.name == current_category_name:
+                current_category = category
+                break
+
+        if not current_category or not hasattr(current_category, 'templates'):
+            return
+
+        # 템플릿이 있는 경우에만 표시
+        if len(current_category.templates) > 0:
+            for i, template in enumerate(current_category.templates):
+                title = template.get('title', f'템플릿 {i + 1}')
+                content_preview = template.get('content', '')
+
+                # 내용 미리보기 (20자 제한)
+                if content_preview:
+                    if len(content_preview) > 20:
+                        content_preview = content_preview[:20] + "..."
+                    display_text = f"{title} - {content_preview}"
+                else:
+                    display_text = title
+
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.ItemDataRole.UserRole, i)  # 템플릿 인덱스 저장
+                item.setToolTip(f"제목: {title}\n내용: {template.get('content', '(내용 없음)')}")
+                self.template_list.addItem(item)
+
+            # 템플릿 그룹 표시
+            self.template_group.setVisible(True)
+        else:
+            # 템플릿이 없으면 그룹 숨기기
+            self.template_group.setVisible(False)
+
+    def on_template_selected(self, item):
+        """템플릿 선택 시 적용 버튼 활성화"""
+        self.apply_template_btn.setEnabled(True)
+
+    def apply_selected_template(self):
+        """선택한 템플릿 적용"""
+        current_item = self.template_list.currentItem()
+        if not current_item:
+            return
+
+        # 템플릿 인덱스 가져오기
+        template_index = current_item.data(Qt.ItemDataRole.UserRole)
+
+        # 현재 카테고리의 템플릿 가져오기
+        current_category_name = self.category_combo.currentText()
+        current_category = None
+
+        for category in self.storage_manager.categories:
+            if category.name == current_category_name:
+                current_category = category
+                break
+
+        if (current_category and hasattr(current_category, 'templates') and
+                0 <= template_index < len(current_category.templates)):
+            template = current_category.templates[template_index]
+
+            # 제목과 내용 적용
+            self.title_edit.setText(template.get('title', ''))
+            self.content_edit.setText(template.get('content', ''))
+
+            # 적용 완료 메시지
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "템플릿 적용", f"템플릿 '{template.get('title', '')}'이 적용되었습니다.")
+
+    def clear_form_fields(self):
+        """양식 필드 초기화"""
+        self.title_edit.clear()
+        self.content_edit.clear()
+        self.important_check.setChecked(False)
+        self.color_radios["none"].setChecked(True)
+
     def populate_form(self):
         """기존 작업 데이터 폼에 표시"""
         if not self.task:
@@ -193,6 +316,9 @@ class TaskForm(QDialog):
             self.color_radios[self.task.bg_color].setChecked(True)
 
         self.important_check.setChecked(self.task.important)
+
+        # 편집 모드에서는 템플릿 그룹 숨기기 (기존 작업 편집 시에는 템플릿 불필요)
+        self.template_group.setVisible(False)
 
     def get_selected_color(self):
         """선택된 배경색 코드 반환"""
