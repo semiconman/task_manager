@@ -170,6 +170,16 @@ class MainWindow(QMainWindow):
         category_action.triggered.connect(self.on_manage_categories)
         options_menu.addAction(category_action)
 
+        # 메일 설정
+        email_action = QAction("메일 설정", self)
+        email_action.triggered.connect(self.on_email_settings)
+        options_menu.addAction(email_action)
+
+        # 메일 관리 (간단버전)
+        simple_email_action = QAction("메일 관리", self)
+        simple_email_action.triggered.connect(self.on_simple_email)
+        options_menu.addAction(simple_email_action)
+
     def on_date_selected(self, date):
         """날짜 선택 이벤트 처리
 
@@ -217,6 +227,16 @@ class MainWindow(QMainWindow):
         export_action = QAction("CSV 내보내기", self)
         export_action.triggered.connect(self.on_export_csv)
         menu.addAction(export_action)
+
+        # 메일 설정
+        email_action = QAction("메일 설정", self)
+        email_action.triggered.connect(self.on_email_settings)
+        menu.addAction(email_action)
+
+        # 즉시 메일 발송
+        send_mail_action = QAction("즉시 메일 발송", self)
+        send_mail_action.triggered.connect(self.on_send_immediate_email)
+        menu.addAction(send_mail_action)
 
         # 달력 뷰 모드 전환
         calendar_view_action = QAction("달력 뷰 모드", self)
@@ -306,3 +326,83 @@ class MainWindow(QMainWindow):
         # 종료 전에 데이터 저장
         self.storage_manager.save_data()
         event.accept()
+
+    def on_email_settings(self):
+        """메일 설정 대화상자 표시"""
+        try:
+            from ui.email_settings_dialog import EmailSettingsDialog
+            dialog = EmailSettingsDialog(self.storage_manager)
+            dialog.exec()
+        except Exception as e:
+            print(f"메일 설정 중 오류: {e}")
+            QMessageBox.critical(self, "오류", f"메일 설정 중 오류가 발생했습니다:\n{e}")
+
+    def on_simple_email(self):
+        """간단한 메일 관리 대화상자 표시"""
+        try:
+            from ui.simple_email_dialog import SimpleEmailDialog
+            dialog = SimpleEmailDialog(self.storage_manager)
+            dialog.exec()
+        except Exception as e:
+            print(f"메일 관리 중 오류: {e}")
+            QMessageBox.critical(self, "오류", f"메일 관리 중 오류가 발생했습니다:\n{e}")
+    def on_email_schedule(self):
+        """메일 예약 관리 대화상자 표시"""
+        try:
+            from ui.email_schedule_dialog import EmailScheduleDialog
+            dialog = EmailScheduleDialog(self.storage_manager)
+            dialog.exec()
+        except Exception as e:
+            print(f"메일 예약 관리 중 오류: {e}")
+            QMessageBox.critical(self, "오류", f"메일 예약 관리 중 오류가 발생했습니다:\n{e}")
+    def on_send_immediate_email(self):
+        """즉시 메일 발송"""
+        try:
+            from utils.email_sender import EmailSender
+            import json
+            import os
+
+            # 메일 기능 사용 가능 여부 먼저 확인
+            sender = EmailSender(self.storage_manager)
+            available, error_msg = sender.check_availability()
+            if not available:
+                QMessageBox.critical(self, "메일 기능 사용 불가", error_msg)
+                return
+
+            # 메일 설정 로드
+            settings_file = "data/email_settings.json"
+            if not os.path.exists(settings_file):
+                QMessageBox.warning(self, "설정 없음",
+                                    "메일 설정이 없습니다.\n먼저 '옵션 > 메일 설정'에서 설정을 완료하세요.")
+                return
+
+            with open(settings_file, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+
+            # 수신자 확인
+            if not settings.get("recipients"):
+                QMessageBox.warning(self, "수신자 없음",
+                                    "수신자가 설정되지 않았습니다.\n먼저 메일 설정에서 수신자를 추가하세요.")
+                return
+
+            # 메일 발송 확인
+            recipients_text = ", ".join(settings["recipients"])
+            reply = QMessageBox.question(
+                self, "메일 발송 확인",
+                f"다음 수신자에게 메일을 발송하시겠습니까?\n\n{recipients_text}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                # 메일 발송
+                success = sender.send_scheduled_email(settings, is_test=False)
+
+                if success:
+                    QMessageBox.information(self, "발송 완료", "메일이 성공적으로 발송되었습니다.")
+                else:
+                    QMessageBox.critical(self, "발송 실패", "메일 발송에 실패했습니다.\n\nOutlook이 실행 중인지 확인하세요.")
+
+        except Exception as e:
+            print(f"즉시 메일 발송 중 오류: {e}")
+            QMessageBox.critical(self, "오류", f"메일 발송 중 오류가 발생했습니다:\n{e}")

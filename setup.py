@@ -15,7 +15,7 @@ if sys.platform == "win32":
 # 빌드 옵션 설정
 build_options = {
     # 필요한 패키지 포함
-    "packages": ["PyQt6", "uuid", "json", "datetime", "csv"],
+    "packages": ["PyQt6", "uuid", "json", "datetime", "csv", "win32com.client", "subprocess"],
 
     # 필요한 파일/폴더 포함
     "include_files": [
