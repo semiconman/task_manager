@@ -29,7 +29,7 @@ class SimpleEmailDialog(QDialog):
         self.auto_timer.start(60000)
 
         self.setWindowTitle("📧 메일 관리")
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(900, 700)  # 세로 크기 증가
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.init_ui()
@@ -160,7 +160,6 @@ class SimpleEmailDialog(QDialog):
 
         self.once_radio = QRadioButton("한번만")
         self.once_radio.setChecked(True)
-        self.once_radio.toggled.connect(self.on_type_changed)
 
         self.daily_radio = QRadioButton("매일")
         self.weekly_radio = QRadioButton("매주")
@@ -168,6 +167,9 @@ class SimpleEmailDialog(QDialog):
         self.type_group.addButton(self.once_radio)
         self.type_group.addButton(self.daily_radio)
         self.type_group.addButton(self.weekly_radio)
+
+        # 라디오 버튼 그룹 시그널 연결 (개별 toggled 대신 buttonClicked 사용)
+        self.type_group.buttonClicked.connect(self.on_type_changed)
 
         type_layout.addWidget(QLabel("타입:"))
         type_layout.addWidget(self.once_radio)
@@ -273,18 +275,27 @@ class SimpleEmailDialog(QDialog):
         # 초기 상태 설정
         self.on_type_changed()
 
-    def on_type_changed(self):
-        """발송 타입 변경시"""
-        is_once = self.once_radio.isChecked()
-        is_weekly = self.weekly_radio.isChecked()
+    def on_type_changed(self, button=None):
+        """발송 타입 변경시 - 버튼 클릭 시에만 호출됨"""
+        try:
+            # 현재 선택된 버튼 확인
+            is_once = self.once_radio.isChecked()
+            is_weekly = self.weekly_radio.isChecked()
 
-        # 날짜는 한번만 발송시에만 표시
-        self.date_label.setVisible(is_once)
-        self.date_edit.setVisible(is_once)
+            print(f"타입 변경: 한번만={is_once}, 매주={is_weekly}")  # 디버깅용
 
-        # 요일은 매주 발송시에만 표시
-        self.weekday_label.setVisible(is_weekly)
-        self.weekday_combo.setVisible(is_weekly)
+            # 날짜는 한번만 발송시에만 표시
+            self.date_label.setVisible(is_once)
+            self.date_edit.setVisible(is_once)
+
+            # 요일은 매주 발송시에만 표시
+            self.weekday_label.setVisible(is_weekly)
+            self.weekday_combo.setVisible(is_weekly)
+
+            print(f"요일 표시 상태: {is_weekly}")  # 디버깅용
+
+        except Exception as e:
+            print(f"타입 변경 중 오류: {e}")
 
     def load_saved_recipients(self):
         """메일설정에서 저장된 수신자 목록을 선택해서 추가"""
@@ -458,12 +469,14 @@ class SimpleEmailDialog(QDialog):
                 "id": datetime.now().strftime("%Y%m%d_%H%M%S"),
                 "name": name,
                 "custom_title": subject,
-                "recipients": recipients,  # 리스트로 변경
+                "recipients": recipients,
                 "content_types": content_types,
                 "period": self.period_combo.currentText(),
                 "send_time": self.time_edit.time().toString("HH:mm"),
                 "enabled": True,
-                "created_at": datetime.now().isoformat()
+                "created_at": datetime.now().isoformat(),
+                "last_sent_date": None,
+                "last_sent_time": None
             }
 
             # 발송 타입에 따라 설정
@@ -531,7 +544,12 @@ class SimpleEmailDialog(QDialog):
                 time_info = f"{date} {time}"
                 type_icon = "📧"
 
-            display_text = f"{enabled} {type_icon} {name} | {time_info}"
+            # 마지막 발송 정보 추가
+            last_sent_info = ""
+            if schedule.get("last_sent_date") and schedule.get("last_sent_time"):
+                last_sent_info = f" [최근발송: {schedule['last_sent_date']} {schedule['last_sent_time']}]"
+
+            display_text = f"{enabled} {type_icon} {name} | {time_info}{last_sent_info}"
 
             item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, schedule)
@@ -539,7 +557,6 @@ class SimpleEmailDialog(QDialog):
 
     def on_schedule_clicked(self, item):
         """예약 선택시"""
-        # 선택된 항목 표시만 (편집 기능은 제거해서 단순화)
         pass
 
     def send_now(self):
@@ -551,6 +568,8 @@ class SimpleEmailDialog(QDialog):
 
         schedule = current_item.data(Qt.ItemDataRole.UserRole)
         if self.send_email(schedule):
+            # 발송 성공 시 마지막 발송 시간 업데이트
+            self.update_last_sent_time(schedule)
             QMessageBox.information(self, "발송완료", f"'{schedule['name']}' 메일을 발송했습니다!")
 
     def delete_schedule(self):
@@ -590,22 +609,40 @@ class SimpleEmailDialog(QDialog):
 
     def test_send(self):
         """테스트 메일 발송"""
-        # 현재 입력된 내용으로 테스트 발송
         recipients = self.get_current_recipients()
         if not recipients:
             QMessageBox.warning(self, "수신자 오류", "테스트할 수신자를 추가하세요.")
             return
 
-        # 임시 스케줄 생성
         temp_schedule = {
             "custom_title": self.subject_edit.text().strip() or "테스트",
             "recipients": recipients,
-            "content_types": ["all"],  # 테스트는 전체 내용
+            "content_types": ["all"],
             "period": "오늘"
         }
 
         if self.send_email(temp_schedule, is_test=True):
             QMessageBox.information(self, "테스트완료", f"{len(recipients)}명에게 테스트 메일을 발송했습니다!")
+
+    def update_last_sent_time(self, schedule):
+        """마지막 발송 시간 업데이트"""
+        try:
+            current_time = datetime.now()
+            schedule_id = schedule["id"]
+
+            # 해당 스케줄 찾아서 업데이트
+            for s in self.email_schedules:
+                if s["id"] == schedule_id:
+                    s["last_sent_date"] = current_time.strftime("%Y-%m-%d")
+                    s["last_sent_time"] = current_time.strftime("%H:%M")
+                    break
+
+            # 저장하고 목록 새로고침
+            self.save_email_schedules()
+            self.load_schedule_list()
+
+        except Exception as e:
+            print(f"마지막 발송 시간 업데이트 중 오류: {e}")
 
     def check_auto_send(self):
         """자동 발송 체크 (1분마다 실행)"""
@@ -613,41 +650,43 @@ class SimpleEmailDialog(QDialog):
             now = datetime.now()
             current_date = now.strftime("%Y-%m-%d")
             current_time = now.strftime("%H:%M")
-            current_weekday = now.weekday()  # 0=월요일
+            current_weekday = now.weekday()
 
             for schedule in self.email_schedules:
                 if not schedule.get("enabled", True):
                     continue
 
-                # 시간 체크
                 if schedule.get("send_time") != current_time:
                     continue
 
-                # 오늘 이미 발송했는지 체크
                 if schedule.get("last_sent_date") == current_date:
                     continue
 
                 should_send = False
 
                 if schedule.get("is_recurring", False):
-                    # 반복 발송
                     freq = schedule.get("frequency", "daily")
                     if freq == "daily":
                         should_send = True
-                    elif freq == "weekly" and current_weekday == 0:  # 월요일
-                        should_send = True
+                    elif freq == "weekly":
+                        # 매주 발송: 지정된 요일인지 확인
+                        schedule_weekday = schedule.get("weekday", "monday")
+                        weekday_map = {
+                            "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+                            "friday": 4, "saturday": 5, "sunday": 6
+                        }
+                        target_weekday = weekday_map.get(schedule_weekday, 0)
+                        if current_weekday == target_weekday:
+                            should_send = True
                 else:
-                    # 단발 발송
                     if schedule.get("send_date") == current_date:
                         should_send = True
 
                 if should_send:
-                    # 메일 발송
                     if self.send_email(schedule):
-                        # 발송 기록
                         schedule["last_sent_date"] = current_date
+                        schedule["last_sent_time"] = current_time
 
-                        # 단발 발송이면 비활성화
                         if not schedule.get("is_recurring", False):
                             schedule["enabled"] = False
 
@@ -667,7 +706,7 @@ class SimpleEmailDialog(QDialog):
             available, error_msg = sender.check_availability()
 
             if not available:
-                if is_test:  # 테스트인 경우만 에러 표시
+                if is_test:
                     QMessageBox.critical(self, "메일 불가", error_msg)
                 return False
 

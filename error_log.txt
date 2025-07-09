@@ -50,3 +50,13 @@ Traceback:
     self.template_list.clear()
     ^^^^^^^^^^^^^^^^^^
 
+
+
+Error Time: 2025-07-09 09:30:29.122399
+Exception Type: KeyboardInterrupt
+Exception Value: 
+Traceback:
+  File "C:\Users\20198\PycharmProjects\Task_manager\utils\storage.py", line 78, in save_data
+    def save_data(self):
+    
+

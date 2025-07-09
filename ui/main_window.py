@@ -35,9 +35,10 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         """UI 초기화"""
-        # 윈도우 설정
+        # 윈도우 설정 - 크기 증가로 기능 버튼들이 가려지지 않도록 함
         self.setWindowTitle("Todolist_PM")
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(1100, 700)  # 최소 크기
+        self.resize(1100, 700)  # 초기 크기를 1100x700으로 설정
 
         # 메뉴바 설정
         self.setup_menu_bar()
@@ -108,8 +109,8 @@ class MainWindow(QMainWindow):
 
         self.splitter.addWidget(self.task_container)
 
-        # 스플리터 비율 설정 (좌:우 = 1:3)
-        self.splitter.setSizes([200, 600])
+        # 스플리터 비율 설정 (좌:우 = 1:3, 우측 영역을 더 넓게)
+        self.splitter.setSizes([250, 950])  # 기존 [200, 600] → [250, 950]
 
         # 현재 날짜의 작업 로드
         self.load_current_date_tasks()
@@ -298,8 +299,8 @@ class MainWindow(QMainWindow):
             else:
                 # 기본 모드로 전환
                 self.task_container.show()
-                # 스플리터 비율 복원
-                self.splitter.setSizes([200, 600])
+                # 스플리터 비율 복원 (기능 버튼이 잘 보이도록 더 넓게)
+                self.splitter.setSizes([250, 950])
                 # 달력 위젯에 뷰 모드 해제
                 if hasattr(self.calendar_widget, 'setCalendarViewMode'):
                     self.calendar_widget.setCalendarViewMode(False)
