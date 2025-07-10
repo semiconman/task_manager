@@ -322,65 +322,145 @@ def create_color_dot_icon(path, size=16):
 
 
 def create_app_icon(path, size=512):
-    """애플리케이션 아이콘 생성"""
+    """애플리케이션 아이콘 생성 (개선된 버전)"""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # 배경 그리기
+    # 배경 그라디언트 (더 현대적인 색상)
     gradient = QLinearGradient(0, 0, size, size)
-    gradient.setColorAt(0, QColor("#4285F4"))
-    gradient.setColorAt(1, QColor("#34A853"))
+    gradient.setColorAt(0, QColor("#667eea"))  # 보라-파랑
+    gradient.setColorAt(0.5, QColor("#764ba2"))  # 보라
+    gradient.setColorAt(1, QColor("#f093fb"))  # 분홍
 
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QBrush(gradient))
-    painter.drawRoundedRect(0, 0, size, size, size / 10, size / 10)
+    painter.drawRoundedRect(0, 0, size, size, size / 8, size / 8)
 
-    # 체크리스트 모양 그리기
-    padding = size / 5
-    rect_width = size - 2 * padding
-    rect_height = size / 14
+    # 그림자 효과
+    shadow_gradient = QLinearGradient(0, size * 0.7, 0, size)
+    shadow_gradient.setColorAt(0, QColor(0, 0, 0, 0))
+    shadow_gradient.setColorAt(1, QColor(0, 0, 0, 50))
+    painter.setBrush(QBrush(shadow_gradient))
+    painter.drawRoundedRect(0, 0, size, size, size / 8, size / 8)
 
+    # 메인 체크리스트 아이콘
+    padding = size / 6
+    item_height = size / 12
+
+    # 흰색 반투명 배경
+    painter.setBrush(QBrush(QColor(255, 255, 255, 30)))
+    painter.drawRoundedRect(
+        int(padding), int(padding),
+        int(size - 2 * padding), int(size - 2 * padding),
+        int(size / 20), int(size / 20)
+    )
+
+    # 체크리스트 항목들
     painter.setBrush(QBrush(QColor("#FFFFFF")))
+    painter.setPen(Qt.PenStyle.NoPen)
 
     for i in range(5):
-        y_pos = padding + i * (rect_height * 1.5)
+        y_pos = padding + padding / 2 + i * (item_height * 1.8)
 
-        # 체크 박스
+        # 체크박스
+        checkbox_size = item_height * 0.8
         painter.drawRoundedRect(
-            int(padding), int(y_pos), int(rect_height), int(rect_height),
-            rect_height / 5, rect_height / 5
+            int(padding + padding / 3), int(y_pos),
+            int(checkbox_size), int(checkbox_size),
+            int(checkbox_size / 6), int(checkbox_size / 6)
         )
 
-        # 체크 표시 (첫 3개 항목)
+        # 체크 표시 (처음 3개 항목)
         if i < 3:
-            painter.setPen(QPen(QColor("#4285F4"), rect_height / 5))
+            painter.setPen(QPen(QColor("#4CAF50"), int(checkbox_size / 6)))
 
-            # 체크 모양
+            # 체크 모양 그리기
+            check_start_x = padding + padding / 3 + checkbox_size * 0.2
+            check_start_y = y_pos + checkbox_size * 0.5
+            check_mid_x = padding + padding / 3 + checkbox_size * 0.45
+            check_mid_y = y_pos + checkbox_size * 0.7
+            check_end_x = padding + padding / 3 + checkbox_size * 0.8
+            check_end_y = y_pos + checkbox_size * 0.3
+
             painter.drawLine(
-                int(padding + rect_height * 0.2), int(y_pos + rect_height * 0.5),
-                int(padding + rect_height * 0.4), int(y_pos + rect_height * 0.7)
+                QPoint(int(check_start_x), int(check_start_y)),
+                QPoint(int(check_mid_x), int(check_mid_y))
             )
             painter.drawLine(
-                int(padding + rect_height * 0.4), int(y_pos + rect_height * 0.7),
-                int(padding + rect_height * 0.8), int(y_pos + rect_height * 0.3)
+                QPoint(int(check_mid_x), int(check_mid_y)),
+                QPoint(int(check_end_x), int(check_end_y))
             )
-
             painter.setPen(Qt.PenStyle.NoPen)
 
-        # 항목 텍스트 라인
+        # 텍스트 라인
+        line_width = (size - 2 * padding) * 0.6
+        line_y = y_pos + checkbox_size * 0.3
+        line_height = checkbox_size * 0.4
+
         painter.drawRoundedRect(
-            int(padding + rect_height * 1.5), int(y_pos + rect_height * 0.25),
-            int(rect_width - rect_height * 1.5), int(rect_height * 0.5),
-            rect_height / 5, rect_height / 5
+            int(padding + padding / 3 + checkbox_size * 1.4), int(line_y),
+            int(line_width), int(line_height),
+            int(line_height / 4), int(line_height / 4)
         )
+
+    # 텍스트 추가 (하단)
+    painter.setPen(QPen(QColor("#FFFFFF")))
+    font = QFont("Arial", int(size / 20), QFont.Weight.Bold)
+    painter.setFont(font)
+
+    text_rect = QRect(0, int(size * 0.8), size, int(size * 0.2))
+    painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, "Todolist PM")
 
     painter.end()
 
     success = pixmap.save(path)
-    print(f"아이콘 저장 {'성공' if success else '실패'}: {path}")
+    print(f"앱 아이콘 저장 {'성공' if success else '실패'}: {path}")
+    return pixmap
+
+
+def create_ico_file(png_path, ico_path):
+    """PNG 파일을 ICO 파일로 변환"""
+    try:
+        # PIL 라이브러리 사용 (없으면 설치 필요)
+        try:
+            from PIL import Image
+
+            # PNG 이미지 열기
+            img = Image.open(png_path)
+
+            # ICO 파일로 저장 (여러 크기 포함)
+            img.save(ico_path, format='ICO', sizes=[
+                (16, 16), (32, 32), (48, 48), (64, 64),
+                (128, 128), (256, 256)
+            ])
+            print(f"ICO 파일 생성 성공: {ico_path}")
+            return True
+
+        except ImportError:
+            print("PIL 라이브러리가 없어서 ICO 파일을 생성할 수 없습니다.")
+            print("설치 방법: pip install Pillow")
+
+            # PyQt6로 간단한 ICO 생성 시도
+            pixmap = QPixmap(png_path)
+            if not pixmap.isNull():
+                # 256x256 크기로 리사이즈
+                scaled_pixmap = pixmap.scaled(256, 256, Qt.AspectRatioMode.KeepAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
+                success = scaled_pixmap.save(ico_path, "ICO")
+                if success:
+                    print(f"PyQt6로 ICO 파일 생성 성공: {ico_path}")
+                    return True
+                else:
+                    print(f"PyQt6로 ICO 파일 생성 실패: {ico_path}")
+                    return False
+            return False
+
+    except Exception as e:
+        print(f"ICO 파일 생성 중 오류: {e}")
+        return False
 
 
 def find_png_files(start_path):
@@ -408,7 +488,7 @@ if __name__ == "__main__":
 
     print(f"아이콘을 저장할 디렉토리: {icons_dir}")
 
-    # 아이콘 생성
+    # 기본 아이콘들 생성
     create_add_icon(os.path.join(icons_dir, "add.png"))
     create_options_icon(os.path.join(icons_dir, "options.png"))
     create_star_icon(os.path.join(icons_dir, "star.png"), filled=True)
@@ -419,8 +499,32 @@ if __name__ == "__main__":
     create_radio_check_icon(os.path.join(icons_dir, "radio_check.png"))
     create_dropdown_icon(os.path.join(icons_dir, "dropdown.png"))
     create_color_dot_icon(os.path.join(icons_dir, "color_dot.png"))
-    create_app_icon(os.path.join(icons_dir, "app_icon.png"))
 
+    # 앱 아이콘 생성 (여러 크기)
+    print("\n=== 앱 아이콘 생성 중 ===")
+
+    # 고해상도 앱 아이콘 (512x512)
+    app_icon_512 = os.path.join(icons_dir, "app_icon.png")
+    create_app_icon(app_icon_512, 512)
+
+    # 중간 해상도 (256x256)
+    app_icon_256 = os.path.join(icons_dir, "app_icon_256.png")
+    create_app_icon(app_icon_256, 256)
+
+    # 작은 해상도 (128x128)
+    app_icon_128 = os.path.join(icons_dir, "app_icon_128.png")
+    create_app_icon(app_icon_128, 128)
+
+    # 윈도우용 ICO 파일 생성
+    print("\n=== ICO 파일 생성 중 ===")
+    ico_path = os.path.join(icons_dir, "app_icon.ico")
+    ico_success = create_ico_file(app_icon_512, ico_path)
+
+    if not ico_success:
+        print("\n⚠️  ICO 파일 생성을 위해 Pillow 라이브러리 설치를 권장합니다:")
+        print("명령어: pip install Pillow")
+
+    print("\n=== 생성 완료 ===")
     print("모든 아이콘이 생성되었습니다.")
 
     # 생성된 PNG 파일 찾기
@@ -428,3 +532,11 @@ if __name__ == "__main__":
     print(f"\n찾은 PNG 파일 개수: {len(png_files)}")
     for file in png_files:
         print(f" - {file}")
+
+    print(f"\n📁 아이콘 저장 위치: {icons_dir}")
+    print("🎨 앱 아이콘 파일:")
+    print(f" - app_icon.png (512x512) - 고해상도")
+    print(f" - app_icon_256.png (256x256) - 중간해상도")
+    print(f" - app_icon_128.png (128x128) - 작은해상도")
+    if ico_success:
+        print(f" - app_icon.ico - Windows 실행파일용")
