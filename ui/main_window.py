@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QMenuBar, QMenu, QMessageBox, QFileDialog
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QAction, QIcon
 
 from datetime import datetime
@@ -14,7 +14,9 @@ from ui.task_list import TaskListWidget
 from ui.task_form import TaskForm
 from ui.export_dialog import ExportDialog
 from ui.category_dialog import CategoryDialog
+from ui.daily_report_dialog import DailyReportDialog
 from utils.date_utils import get_current_date_str, format_date_for_display
+from utils.daily_routine_checker import DailyRoutineChecker
 
 
 class MainWindow(QMainWindow):
@@ -88,6 +90,24 @@ class MainWindow(QMainWindow):
 
         top_bar_layout.addStretch()
 
+        # 데일리 리포트 버튼 (새로 추가)
+        self.daily_report_button = QPushButton("📊 데일리 리포트")
+        self.daily_report_button.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                border: none;
+                padding: 8px 12px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+        """)
+        self.daily_report_button.clicked.connect(self.on_daily_report)
+        top_bar_layout.addWidget(self.daily_report_button)
+
         # 새 작업 버튼
         self.add_task_button = QPushButton("새 작업")
         self.add_task_button.setIcon(QIcon("resources/icons/add.png"))
@@ -117,6 +137,12 @@ class MainWindow(QMainWindow):
 
         # 달력 뷰 모드 상태 초기화
         self.calendar_view_mode = False
+
+        # 데일리 루틴 체커 초기화 및 타이머 설정
+        self.routine_checker = DailyRoutineChecker(self.storage_manager)
+        self.routine_timer = QTimer()
+        self.routine_timer.timeout.connect(self.check_daily_routines)
+        self.routine_timer.start(60000)  # 1분마다 체크
 
     def setup_menu_bar(self):
         """메뉴바 설정"""
@@ -215,6 +241,15 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"작업 추가 중 오류: {e}")
 
+    def on_daily_report(self):
+        """데일리 리포트 버튼 클릭 처리"""
+        try:
+            dialog = DailyReportDialog(self.storage_manager, self.current_date)
+            dialog.exec()
+        except Exception as e:
+            print(f"데일리 리포트 중 오류: {e}")
+            QMessageBox.critical(self, "오류", f"데일리 리포트 중 오류가 발생했습니다:\n{e}")
+
     def show_options_menu(self):
         """옵션 버튼 클릭 시 메뉴 표시"""
         menu = QMenu(self)
@@ -233,11 +268,6 @@ class MainWindow(QMainWindow):
         email_action = QAction("메일 설정", self)
         email_action.triggered.connect(self.on_email_settings)
         menu.addAction(email_action)
-
-        # 즉시 메일 발송
-        send_mail_action = QAction("즉시 메일 발송", self)
-        send_mail_action.triggered.connect(self.on_send_immediate_email)
-        menu.addAction(send_mail_action)
 
         # 달력 뷰 모드 전환
         calendar_view_action = QAction("달력 뷰 모드", self)
@@ -310,6 +340,13 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"달력 뷰 모드 전환 중 오류 발생: {e}")
 
+    def check_daily_routines(self):
+        """데일리 루틴 체크 (1분마다 실행)"""
+        try:
+            self.routine_checker.check_and_execute_routines()
+        except Exception as e:
+            print(f"데일리 루틴 체크 중 오류: {e}")
+
     def refresh_ui(self):
         """UI 새로고침"""
         try:
@@ -324,6 +361,10 @@ class MainWindow(QMainWindow):
         Args:
             event: 종료 이벤트
         """
+        # 타이머 정리
+        if hasattr(self, 'routine_timer'):
+            self.routine_timer.stop()
+
         # 종료 전에 데이터 저장
         self.storage_manager.save_data()
         event.accept()
@@ -347,6 +388,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"메일 관리 중 오류: {e}")
             QMessageBox.critical(self, "오류", f"메일 관리 중 오류가 발생했습니다:\n{e}")
+
     def on_email_schedule(self):
         """메일 예약 관리 대화상자 표시"""
         try:
@@ -356,54 +398,3 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"메일 예약 관리 중 오류: {e}")
             QMessageBox.critical(self, "오류", f"메일 예약 관리 중 오류가 발생했습니다:\n{e}")
-    def on_send_immediate_email(self):
-        """즉시 메일 발송"""
-        try:
-            from utils.email_sender import EmailSender
-            import json
-            import os
-
-            # 메일 기능 사용 가능 여부 먼저 확인
-            sender = EmailSender(self.storage_manager)
-            available, error_msg = sender.check_availability()
-            if not available:
-                QMessageBox.critical(self, "메일 기능 사용 불가", error_msg)
-                return
-
-            # 메일 설정 로드
-            settings_file = "data/email_settings.json"
-            if not os.path.exists(settings_file):
-                QMessageBox.warning(self, "설정 없음",
-                                    "메일 설정이 없습니다.\n먼저 '옵션 > 메일 설정'에서 설정을 완료하세요.")
-                return
-
-            with open(settings_file, "r", encoding="utf-8") as f:
-                settings = json.load(f)
-
-            # 수신자 확인
-            if not settings.get("recipients"):
-                QMessageBox.warning(self, "수신자 없음",
-                                    "수신자가 설정되지 않았습니다.\n먼저 메일 설정에서 수신자를 추가하세요.")
-                return
-
-            # 메일 발송 확인
-            recipients_text = ", ".join(settings["recipients"])
-            reply = QMessageBox.question(
-                self, "메일 발송 확인",
-                f"다음 수신자에게 메일을 발송하시겠습니까?\n\n{recipients_text}",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
-            )
-
-            if reply == QMessageBox.StandardButton.Yes:
-                # 메일 발송
-                success = sender.send_scheduled_email(settings, is_test=False)
-
-                if success:
-                    QMessageBox.information(self, "발송 완료", "메일이 성공적으로 발송되었습니다.")
-                else:
-                    QMessageBox.critical(self, "발송 실패", "메일 발송에 실패했습니다.\n\nOutlook이 실행 중인지 확인하세요.")
-
-        except Exception as e:
-            print(f"즉시 메일 발송 중 오류: {e}")
-            QMessageBox.critical(self, "오류", f"메일 발송 중 오류가 발생했습니다:\n{e}")
