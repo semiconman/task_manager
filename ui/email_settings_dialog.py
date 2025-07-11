@@ -380,7 +380,7 @@ class EmailSettingsDialog(QDialog):
         name_layout = QHBoxLayout()
         name_layout.addWidget(QLabel("이름:"))
         self.routine_name_edit = QLineEdit()
-        self.routine_name_edit.setPlaceholderText("예: 일일 보고")
+        self.routine_name_edit.setPlaceholderText("예: 퇴근전 확인할용도")
         name_layout.addWidget(self.routine_name_edit)
         col1_layout.addLayout(name_layout)
 

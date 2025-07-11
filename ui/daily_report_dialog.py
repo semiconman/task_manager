@@ -118,7 +118,8 @@ class DailyReportDialog(QDialog):
         self.selected_recipients = []
 
         self.setWindowTitle("데일리 리포트")
-        self.setMinimumSize(600, 700)
+        self.setMinimumSize(650, 520)
+        self.setMaximumSize(750, 620)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.init_ui()
@@ -127,48 +128,50 @@ class DailyReportDialog(QDialog):
     def init_ui(self):
         """UI 초기화"""
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)  # 간격 줄임
 
         # 제목
         title_label = QLabel("데일리 리포트 발송")
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold; padding: 10px; color: #333;")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; padding: 5px; color: #333;")
         layout.addWidget(title_label)
 
-        # === 기본 정보 ===
+        # === 기본 정보 (2열로 배치) ===
         basic_group = QGroupBox("기본 정보")
-        basic_layout = QVBoxLayout(basic_group)
+        basic_layout = QHBoxLayout(basic_group)  # 가로 배치로 변경
 
-        # 메일 제목
-        subject_layout = QHBoxLayout()
-        subject_layout.addWidget(QLabel("메일 제목:"))
+        # 왼쪽: 제목
+        left_layout = QVBoxLayout()
+        left_layout.addWidget(QLabel("메일 제목:"))
         self.subject_edit = QLineEdit()
         self.subject_edit.setPlaceholderText("예: 일일 업무 보고")
-        subject_layout.addWidget(self.subject_edit)
-        basic_layout.addLayout(subject_layout)
+        left_layout.addWidget(self.subject_edit)
 
-        # 보고 날짜 선택
-        date_layout = QHBoxLayout()
-        date_layout.addWidget(QLabel("보고 날짜:"))
+        # 오른쪽: 날짜
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(QLabel("보고 날짜:"))
         self.date_edit = QDateEdit()
         self.date_edit.setDate(QDate.fromString(self.current_date, "yyyy-MM-dd"))
         self.date_edit.setCalendarPopup(True)
-        date_layout.addWidget(self.date_edit)
-        date_layout.addStretch()
-        basic_layout.addLayout(date_layout)
+        right_layout.addWidget(self.date_edit)
 
+        basic_layout.addLayout(left_layout, 2)  # 제목이 더 넓게
+        basic_layout.addLayout(right_layout, 1)  # 날짜는 좁게
         layout.addWidget(basic_group)
 
-        # === 수신자 선택 (주소록 방식) ===
+        # === 수신자 선택 (컴팩트하게) ===
         recipient_group = QGroupBox("수신자 선택")
         recipient_layout = QVBoxLayout(recipient_group)
 
-        # 주소록에서 선택 버튼
+        # 버튼들을 한 줄에 배치
+        button_row = QHBoxLayout()
+
         select_from_address_btn = QPushButton("📋 주소록에서 선택")
         select_from_address_btn.clicked.connect(self.select_recipients_from_address_book)
         select_from_address_btn.setStyleSheet("""
             QPushButton {
                 background: #17a2b8;
                 color: white;
-                padding: 8px 16px;
+                padding: 6px 12px;
                 border-radius: 4px;
                 font-weight: bold;
             }
@@ -176,80 +179,79 @@ class DailyReportDialog(QDialog):
                 background: #138496;
             }
         """)
-        recipient_layout.addWidget(select_from_address_btn)
-
-        # 선택된 수신자 표시
-        self.selected_recipients_label = QLabel("선택된 수신자: 없음")
-        self.selected_recipients_label.setStyleSheet(
-            "color: #666; margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px;")
-        recipient_layout.addWidget(self.selected_recipients_label)
-
-        # 수신자 직접 추가 (보조 기능)
-        direct_add_layout = QHBoxLayout()
-        self.recipient_edit = QLineEdit()
-        self.recipient_edit.setPlaceholderText("또는 이메일 주소를 직접 입력")
-
-        add_recipient_btn = QPushButton("추가")
-        add_recipient_btn.clicked.connect(self.add_recipient_directly)
-        add_recipient_btn.setStyleSheet("background: #28a745; color: white; padding: 6px 12px; border-radius: 3px;")
 
         clear_recipients_btn = QPushButton("전체 해제")
         clear_recipients_btn.clicked.connect(self.clear_recipients)
         clear_recipients_btn.setStyleSheet("background: #dc3545; color: white; padding: 6px 12px; border-radius: 3px;")
 
-        direct_add_layout.addWidget(self.recipient_edit)
-        direct_add_layout.addWidget(add_recipient_btn)
-        direct_add_layout.addWidget(clear_recipients_btn)
+        button_row.addWidget(select_from_address_btn)
+        button_row.addWidget(clear_recipients_btn)
+        button_row.addStretch()
+        recipient_layout.addLayout(button_row)
+
+        # 선택된 수신자 표시
+        self.selected_recipients_label = QLabel("선택된 수신자: 없음")
+        self.selected_recipients_label.setStyleSheet(
+            "color: #666; margin: 8px 0; padding: 12px; background: #f8f9fa; border-radius: 4px; min-height: 20px;")
+        self.selected_recipients_label.setWordWrap(True)  # 긴 수신자 목록을 위한 줄바꿈
+        recipient_layout.addWidget(self.selected_recipients_label)
+
+        # 수신자 직접 추가 (한 줄로)
+        direct_add_layout = QHBoxLayout()
+        self.recipient_edit = QLineEdit()
+        self.recipient_edit.setPlaceholderText("이메일 직접 입력")
+
+        add_recipient_btn = QPushButton("추가")
+        add_recipient_btn.clicked.connect(self.add_recipient_directly)
+        add_recipient_btn.setStyleSheet("background: #28a745; color: white; padding: 6px 12px; border-radius: 3px;")
+
+        direct_add_layout.addWidget(self.recipient_edit, 3)
+        direct_add_layout.addWidget(add_recipient_btn, 1)
         recipient_layout.addLayout(direct_add_layout)
 
         layout.addWidget(recipient_group)
 
-        # === 포함 내용 선택 ===
+        # === 포함 내용 + 추가 메모 (2열로 배치) ===
+        content_memo_layout = QHBoxLayout()
+
+        # 왼쪽: 포함 내용
         content_group = QGroupBox("포함 내용")
         content_layout = QVBoxLayout(content_group)
 
-        content_check_layout = QHBoxLayout()
         self.all_tasks_check = QCheckBox("전체 작업")
         self.all_tasks_check.setChecked(True)
         self.completed_tasks_check = QCheckBox("완료된 작업만")
         self.incomplete_tasks_check = QCheckBox("미완료 작업만")
 
-        content_check_layout.addWidget(self.all_tasks_check)
-        content_check_layout.addWidget(self.completed_tasks_check)
-        content_check_layout.addWidget(self.incomplete_tasks_check)
-        content_check_layout.addStretch()
-        content_layout.addLayout(content_check_layout)
+        content_layout.addWidget(self.all_tasks_check)
+        content_layout.addWidget(self.completed_tasks_check)
+        content_layout.addWidget(self.incomplete_tasks_check)
 
-        layout.addWidget(content_group)
-
-        # === 추가 메모 ===
-        memo_group = QGroupBox("추가 메모 (선택사항)")
+        # 오른쪽: 추가 메모
+        memo_group = QGroupBox("추가 메모")
         memo_layout = QVBoxLayout(memo_group)
 
         self.memo_edit = QTextEdit()
-        self.memo_edit.setPlaceholderText("리포트에 포함할 추가 내용이나 메모를 입력하세요...")
-        self.memo_edit.setMaximumHeight(80)
+        self.memo_edit.setPlaceholderText("추가 메모...")
+        self.memo_edit.setMaximumHeight(80)  # 조금 더 키움
         memo_layout.addWidget(self.memo_edit)
 
-        layout.addWidget(memo_group)
+        content_memo_layout.addWidget(content_group, 1)
+        content_memo_layout.addWidget(memo_group, 2)
+        layout.addLayout(content_memo_layout)
 
         # === 미리보기 ===
         preview_group = QGroupBox("리포트 미리보기")
         preview_layout = QVBoxLayout(preview_group)
 
-        self.preview_text = QTextEdit()
-        self.preview_text.setReadOnly(True)
-        self.preview_text.setMaximumHeight(150)
-        self.preview_text.setStyleSheet("background: #f8f9fa; border: 1px solid #dee2e6;")
-        preview_layout.addWidget(self.preview_text)
-
+        preview_btn_layout = QHBoxLayout()
         preview_btn = QPushButton("🔍 미리보기 생성")
         preview_btn.clicked.connect(self.generate_preview)
         preview_btn.setStyleSheet("""
             QPushButton {
                 background: #ffc107;
                 color: black;
-                padding: 8px 16px;
+                padding: 6px 12px;
                 border-radius: 4px;
                 font-weight: bold;
             }
@@ -257,27 +259,20 @@ class DailyReportDialog(QDialog):
                 background: #e0a800;
             }
         """)
-        preview_layout.addWidget(preview_btn)
+        preview_btn_layout.addWidget(preview_btn)
+        preview_btn_layout.addStretch()
+        preview_layout.addLayout(preview_btn_layout)
+
+        self.preview_text = QTextEdit()
+        self.preview_text.setReadOnly(True)
+        self.preview_text.setMaximumHeight(120)  # 미리보기도 조금 키움
+        self.preview_text.setStyleSheet("background: #f8f9fa; border: 1px solid #dee2e6; font-size: 11px;")
+        preview_layout.addWidget(self.preview_text)
 
         layout.addWidget(preview_group)
 
         # === 버튼 ===
         button_layout = QHBoxLayout()
-
-        test_send_btn = QPushButton("🧪 테스트 발송")
-        test_send_btn.clicked.connect(self.test_send)
-        test_send_btn.setStyleSheet("""
-            QPushButton {
-                background: #17a2b8;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: #138496;
-            }
-        """)
 
         send_btn = QPushButton("📧 발송")
         send_btn.clicked.connect(self.send_report)
@@ -288,6 +283,7 @@ class DailyReportDialog(QDialog):
                 padding: 10px 20px;
                 border-radius: 4px;
                 font-weight: bold;
+                font-size: 14px;
             }
             QPushButton:hover {
                 background: #218838;
@@ -296,9 +292,9 @@ class DailyReportDialog(QDialog):
 
         close_btn = QPushButton("닫기")
         close_btn.clicked.connect(self.accept)
-        close_btn.setStyleSheet("background: #6c757d; color: white; padding: 10px 20px; border-radius: 4px;")
+        close_btn.setStyleSheet(
+            "background: #6c757d; color: white; padding: 10px 20px; border-radius: 4px; font-size: 14px;")
 
-        button_layout.addWidget(test_send_btn)
         button_layout.addWidget(send_btn)
         button_layout.addStretch()
         button_layout.addWidget(close_btn)
@@ -313,7 +309,7 @@ class DailyReportDialog(QDialog):
         self.subject_edit.setText(default_subject)
 
     def select_recipients_from_address_book(self):
-        """주소록에서 수신자 선택"""
+        """주소록에서 수신자 선택 (simple_email_dialog 방식과 동일)"""
         try:
             # 주소록 로드
             address_book = self.load_address_book()
@@ -345,7 +341,7 @@ class DailyReportDialog(QDialog):
         return []
 
     def update_selected_recipients_display(self):
-        """선택된 수신자 표시 업데이트"""
+        """선택된 수신자 표시 업데이트 (simple_email_dialog와 동일한 로직)"""
         count = len(self.selected_recipients)
         if count == 0:
             self.selected_recipients_label.setText("선택된 수신자: 없음")
@@ -365,7 +361,7 @@ class DailyReportDialog(QDialog):
                 "color: #333; margin: 10px 0; padding: 10px; background: #e8f5e8; border-radius: 4px; border: 1px solid #4CAF50;")
 
     def add_recipient_directly(self):
-        """수신자 직접 추가"""
+        """수신자 직접 추가 (simple_email_dialog와 동일)"""
         email = self.recipient_edit.text().strip()
         if not email:
             return
@@ -384,7 +380,7 @@ class DailyReportDialog(QDialog):
         self.recipient_edit.clear()
 
     def clear_recipients(self):
-        """모든 수신자 해제"""
+        """모든 수신자 해제 (simple_email_dialog와 동일)"""
         self.selected_recipients = []
         self.update_selected_recipients_display()
 
@@ -415,7 +411,7 @@ class DailyReportDialog(QDialog):
             "total": len(date_tasks),
             "completed_count": len([t for t in date_tasks if t.completed]),
             "completion_rate": (
-                        len([t for t in date_tasks if t.completed]) / len(date_tasks) * 100) if date_tasks else 0
+                    len([t for t in date_tasks if t.completed]) / len(date_tasks) * 100) if date_tasks else 0
         }
 
     def create_preview_text(self, tasks_data, date_str):
@@ -461,8 +457,8 @@ class DailyReportDialog(QDialog):
 
         return preview
 
-    def test_send(self):
-        """테스트 발송"""
+    def send_report(self):
+        """리포트 발송"""
         if not self.validate_inputs():
             return
 
@@ -476,23 +472,6 @@ class DailyReportDialog(QDialog):
                 QMessageBox.critical(self, "메일 기능 사용 불가", error_msg)
                 return
 
-            # 테스트 발송
-            success = self.send_daily_report(is_test=True)
-
-            if success:
-                QMessageBox.information(self, "테스트 발송 완료", "테스트 메일이 성공적으로 발송되었습니다.")
-            else:
-                QMessageBox.critical(self, "테스트 발송 실패", "테스트 메일 발송에 실패했습니다.")
-
-        except Exception as e:
-            QMessageBox.critical(self, "오류", f"테스트 발송 중 오류가 발생했습니다:\n{e}")
-
-    def send_report(self):
-        """리포트 발송"""
-        if not self.validate_inputs():
-            return
-
-        try:
             reply = QMessageBox.question(
                 self, "리포트 발송 확인",
                 f"다음 {len(self.selected_recipients)}명에게 데일리 리포트를 발송하시겠습니까?\n\n" + "\n".join(self.selected_recipients),
@@ -570,137 +549,218 @@ class DailyReportDialog(QDialog):
             return False
 
     def create_html_report(self, tasks_data, date_str, is_test=False):
-        """HTML 데일리 리포트 생성 (예약발송 메일과 동일한 양식)"""
+        """HTML 데일리 리포트 생성 (Outlook 호환성 개선)"""
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
         report_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y년 %m월 %d일")
 
-        # 테스트 메시지
+        # 테스트 메시지 (Outlook 호환)
         test_message = ""
         if is_test:
             test_message = '''
-            <div style="background: #fff3cd; padding: 10px; margin-bottom: 20px; border-radius: 5px;"><strong>테스트 메일입니다</strong></div>
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center; font-weight: bold;">🧪 테스트 메일입니다</td></tr>
+            </table>
             '''
 
-        # 간단한 요약
-        summary = f"""
-        <div style="background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-            <h2 style="color: #1976d2; margin-top: 0;">오늘의 요약</h2>
-            <div style="display: flex; gap: 20px; justify-content: space-around; margin: 15px 0;">
-                <div style="text-align: center;">
-                    <div style="font-size: 24px; font-weight: bold; color: #2196f3;">{tasks_data['total']}</div>
-                    <div style="font-size: 12px; color: #666;">전체 작업</div>
-                </div>
-                <div style="text-align: center;">
-                    <div style="font-size: 24px; font-weight: bold; color: #4caf50;">{tasks_data['completed_count']}</div>
-                    <div style="font-size: 12px; color: #666;">완료됨</div>
-                </div>
-                <div style="text-align: center;">
-                    <div style="font-size: 24px; font-weight: bold; color: #f44336;">{tasks_data['total'] - tasks_data['completed_count']}</div>
-                    <div style="font-size: 12px; color: #666;">미완료</div>
-                </div>
-            </div>
-            <div style="background: #fff; padding: 10px; border-radius: 5px; margin-top: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>완료율</span>
-                    <span style="font-weight: bold; color: #4caf50;">{tasks_data['completion_rate']:.0f}%</span>
-                </div>
-                <div style="background: #e0e0e0; height: 8px; border-radius: 4px; margin-top: 5px;">
-                    <div style="background: #4caf50; height: 8px; border-radius: 4px; width: {tasks_data['completion_rate']:.0f}%;"></div>
-                </div>
-            </div>
-        </div>
-        """
-
-        # 작업 목록 (간단하게)
+        # 작업 목록
         task_lists = ""
 
         if self.all_tasks_check.isChecked() and tasks_data['all']:
-            task_lists += self.create_simple_task_section("전체 작업", tasks_data['all'][:5])
+            task_lists += self.create_outlook_task_section("📋 전체 작업", tasks_data['all'][:5])
         if self.completed_tasks_check.isChecked() and tasks_data['completed']:
-            task_lists += self.create_simple_task_section("완료된 작업", tasks_data['completed'][:5])
+            task_lists += self.create_outlook_task_section("✅ 완료된 작업", tasks_data['completed'][:5])
         if self.incomplete_tasks_check.isChecked() and tasks_data['incomplete']:
-            task_lists += self.create_simple_task_section("미완료 작업", tasks_data['incomplete'][:5])
+            task_lists += self.create_outlook_task_section("⏳ 미완료 작업", tasks_data['incomplete'][:5])
 
-        # 추가 메모 섹션
+        # 추가 메모 섹션 (Outlook 호환)
         memo_section = ""
         memo = self.memo_edit.toPlainText().strip()
         if memo:
             memo_section = f'''
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #333; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;">추가 메모</h3>
-                <div style="background: #f8f9fa; margin: 5px 0; padding: 10px; border-radius: 5px;">
-                    {self.escape_html(memo).replace(chr(10), "<br>")}
-                </div>
-            </div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
+                        <h3 style="margin: 0; color: #333;">📝 추가 메모</h3>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
+                        {self.escape_html(memo).replace(chr(10), "<br>")}
+                    </td>
+                </tr>
+            </table>
             '''
 
-        # 전체 HTML
+        # Outlook 호환 HTML (테이블 기반 레이아웃)
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
-            <style>
-                body {{ font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; padding: 20px; }}
-                .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
-                .header {{ background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 20px; text-align: center; }}
-                .content {{ padding: 20px; }}
-                .footer {{ background: #f8f9fa; padding: 15px; text-align: center; color: #666; font-size: 12px; }}
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Todolist 리포트</title>
+            <!--[if mso]>
+            <style type="text/css">
+                table {{ border-collapse: collapse; }}
+                .header-table {{ background-color: #4facfe !important; }}
             </style>
+            <![endif]-->
         </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1 style="margin: 0;">Todolist 리포트</h1>
-                    <div>{current_time}</div>
-                </div>
-                <div class="content">
-                    {test_message}
-                    {summary}
-                    {task_lists}
-                    {memo_section}
-                </div>
-                <div class="footer">
-                    Todolist PM에서 자동 생성 | {current_time}
-                </div>
-            </div>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+
+            <!-- 메인 컨테이너 -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px;">
+                <tr>
+                    <td align="center">
+
+                        <!-- 메일 내용 테이블 -->
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden;">
+
+                            <!-- 헤더 -->
+                            <tr>
+                                <td class="header-table" style="background-color: #4facfe; padding: 25px 20px; text-align: center;">
+                                    <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 24px; font-weight: bold;">
+                                        📋 Todolist 리포트
+                                    </h1>
+                                    <div style="color: #ffffff; font-size: 16px; margin: 0;">
+                                        {current_time}
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- 메인 컨텐츠 -->
+                            <tr>
+                                <td style="padding: 25px 20px;">
+
+                                    {test_message}
+
+                                    <!-- 데일리 리포트 요약 -->
+                                    <table width="100%" cellpadding="20" cellspacing="0" style="background-color: #e3f2fd; border-radius: 10px; margin-bottom: 20px;">
+                                        <tr>
+                                            <td>
+                                                <h2 style="margin: 0 0 15px 0; color: #1976d2; text-align: center;">📊 데일리 리포트</h2>
+
+                                                <!-- 통계 테이블 -->
+                                                <table width="100%" cellpadding="10" cellspacing="0">
+                                                    <tr>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #2196f3;">{tasks_data['total']}</div>
+                                                            <div style="font-size: 12px; color: #666;">전체 작업</div>
+                                                        </td>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #4caf50;">{tasks_data['completed_count']}</div>
+                                                            <div style="font-size: 12px; color: #666;">완료됨</div>
+                                                        </td>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #f44336;">{tasks_data['total'] - tasks_data['completed_count']}</div>
+                                                            <div style="font-size: 12px; color: #666;">미완료</div>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+
+                                                <!-- 완료율 -->
+                                                <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #ffffff; border-radius: 5px; margin-top: 15px;">
+                                                    <tr>
+                                                        <td>
+                                                            <table width="100%" cellpadding="0" cellspacing="0">
+                                                                <tr>
+                                                                    <td style="font-weight: bold;">완료율</td>
+                                                                    <td style="text-align: right; font-weight: bold; color: #4caf50;">
+                                                                        {tasks_data['completion_rate']:.0f}%
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 5px;">
+                                                                <tr>
+                                                                    <td style="background-color: #e0e0e0; height: 8px; border-radius: 4px;">
+                                                                        <div style="background-color: #4caf50; height: 8px; width: {tasks_data['completion_rate']:.0f}%; border-radius: 4px;"></div>
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                    {task_lists}
+                                    {memo_section}
+
+                                </td>
+                            </tr>
+
+                            <!-- 푸터 -->
+                            <tr>
+                                <td style="background-color: #f8f9fa; padding: 15px 20px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #e9ecef;">
+                                    🤖 Todolist PM에서 자동 생성됨 | {current_time}
+                                </td>
+                            </tr>
+
+                        </table>
+
+                    </td>
+                </tr>
+            </table>
+
         </body>
         </html>
         """
 
         return html
 
-    def create_simple_task_section(self, title, tasks):
-        """작업 섹션 생성 (예약발송과 동일한 양식)"""
+    def create_outlook_task_section(self, title, tasks):
+        """Outlook 호환 작업 섹션 생성 (테이블 기반)"""
         if not tasks:
             return f"""
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #333; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;">{title}</h3>
-                <div style="text-align: center; color: #666; padding: 20px;">작업이 없습니다</div>
-            </div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
+                        <h3 style="margin: 0; color: #333;">{title}</h3>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center; color: #666; padding: 20px;">작업이 없습니다</td>
+                </tr>
+            </table>
             """
 
-        task_items = ""
+        task_rows = ""
         for task in tasks:
             status = "✓" if task.completed else "○"
-            style = "text-decoration: line-through; color: #666;" if task.completed else ""
-            importance = "★" if task.important else ""
+            text_style = "text-decoration: line-through; color: #666;" if task.completed else ""
+            importance = "★ " if task.important else ""
+            border_color = "#4caf50" if task.completed else "#2196f3"
 
-            task_items += f"""
-            <div style="background: #f8f9fa; margin: 5px 0; padding: 10px; border-radius: 5px; border-left: 3px solid {'#4caf50' if task.completed else '#2196f3'};">
-                <div style="{style}">
-                    {status} {importance} <strong>{self.escape_html(task.title)}</strong>
-                    <span style="background: #e0e0e0; color: #666; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">{task.category}</span>
-                </div>
-                {f'<div style="font-size: 12px; color: #666; margin-top: 5px;">{self.escape_html(task.content[:50])}</div>' if task.content else ''}
-            </div>
+            task_rows += f"""
+            <tr>
+                <td style="padding: 10px; background-color: #f8f9fa; border-left: 3px solid {border_color}; border-radius: 5px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="{text_style}">
+                                <strong>{status} {importance}{self.escape_html(task.title)}</strong>
+                                <span style="background-color: #e0e0e0; color: #666; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">
+                                    {task.category}
+                                </span>
+                            </td>
+                        </tr>
+                        {f'<tr><td style="font-size: 12px; color: #666; padding-top: 5px;">{self.escape_html(task.content[:50])}</td></tr>' if task.content else ''}
+                    </table>
+                </td>
+            </tr>
+            <tr><td style="height: 5px;"></td></tr>
             """
 
         return f"""
-        <div style="margin-bottom: 20px;">
-            <h3 style="color: #333; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;">{title}</h3>
-            {task_items}
-        </div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
+                    <h3 style="margin: 0; color: #333;">{title}</h3>
+                </td>
+            </tr>
+            <tr><td style="height: 10px;"></td></tr>
+            {task_rows}
+        </table>
         """
 
     def get_category_color(self, category_name):
