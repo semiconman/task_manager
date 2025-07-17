@@ -226,7 +226,7 @@ class SimpleEmailDialog(QDialog):
         schedule_layout.addLayout(datetime_layout)
         scroll_layout.addWidget(schedule_group)
 
-        # === 3. 카테고리 필터 (새로 추가) ===
+        # === 3. 카테고리 필터 ===
         category_group = QGroupBox("카테고리 필터")
         category_layout = QVBoxLayout(category_group)
 
@@ -350,7 +350,9 @@ class SimpleEmailDialog(QDialog):
 
     def get_selected_categories(self):
         """선택된 카테고리 목록 반환"""
-        if self.all_categories_check.isChecked():
+        # 수정: 모든 카테고리 체크박스와 개별 체크박스 상태 모두 확인
+        if self.all_categories_check.isChecked() and all(check.isChecked() for check in self.category_checks.values()):
+            print("Simple Email - 카테고리 필터: 모든 카테고리 선택됨")
             return None  # 모든 카테고리
 
         selected_categories = []
@@ -358,6 +360,7 @@ class SimpleEmailDialog(QDialog):
             if check.isChecked():
                 selected_categories.append(category_name)
 
+        print(f"Simple Email - 카테고리 필터: 선택된 카테고리 = {selected_categories}")
         return selected_categories if selected_categories else None
 
     def on_type_changed(self, button=None):
@@ -645,22 +648,218 @@ class SimpleEmailDialog(QDialog):
             # 카테고리 필터 정보 추가
             category_info = ""
             selected_categories = schedule.get("selected_categories")
-            if selected_categories is not None:
+            if selected_categories is not None and len(selected_categories) > 0:
                 if len(selected_categories) <= 2:
                     category_info = f" [카테고리: {', '.join(selected_categories)}]"
                 else:
                     category_info = f" [카테고리: {', '.join(selected_categories[:2])} 외 {len(selected_categories) - 2}개]"
 
-            # 마지막 발송 정보 추가
+            # 발송 이력 정보 추가 - 개선된 표시
             last_sent_info = ""
-            if schedule.get("last_sent_date") and schedule.get("last_sent_time"):
-                last_sent_info = f" [최근발송: {schedule['last_sent_date']} {schedule['last_sent_time']}]"
+            last_sent_date = schedule.get("last_sent_date")
+            last_sent_time = schedule.get("last_sent_time")
+            total_sent = schedule.get("total_sent_count", 0)
+
+            if last_sent_date and last_sent_time:
+                last_sent_info = f"\n최근발송: {last_sent_date} {last_sent_time}"
+                if total_sent > 1:
+                    last_sent_info += f" | 총 {total_sent}회"
+            elif total_sent > 0:
+                last_sent_info = f"\n총 발송: {total_sent}회"
 
             display_text = f"{enabled} {type_icon} {name} | {time_info}{category_info}{last_sent_info}"
 
             item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, schedule)
             self.schedule_list.addItem(item)
+
+    def send_now(self):
+        """선택한 예약 즉시 발송"""
+        current_item = self.schedule_list.currentItem()
+        if not current_item:
+            QMessageBox.information(self, "선택없음", "발송할 예약을 선택하세요.")
+            return
+
+        schedule = current_item.data(Qt.ItemDataRole.UserRole)
+        if self.send_email(schedule):
+            # 발송 성공 시 발송 이력 업데이트
+            self.update_schedule_send_history(schedule)
+            QMessageBox.information(self, "발송완료", f"'{schedule['name']}' 메일을 발송했습니다!")
+
+    def update_schedule_send_history(self, schedule):
+        """예약 발송 이력 업데이트"""
+        try:
+            current_time = datetime.now()
+            schedule_id = schedule["id"]
+
+            # 해당 스케줄 찾아서 업데이트
+            for s in self.email_schedules:
+                if s["id"] == schedule_id:
+                    s["last_sent_date"] = current_time.strftime("%Y-%m-%d")
+                    s["last_sent_time"] = current_time.strftime("%H:%M")
+                    s["total_sent_count"] = s.get("total_sent_count", 0) + 1
+                    print(
+                        f"예약 '{s['name']}' 발송 이력 업데이트: {s['last_sent_date']} {s['last_sent_time']} (총 {s['total_sent_count']}회)")
+                    break
+
+            # 저장하고 목록 새로고침
+            self.save_email_schedules()
+            self.load_schedule_list()
+
+        except Exception as e:
+            print(f"예약 발송 이력 업데이트 중 오류: {e}")
+
+    def check_auto_send(self):
+        """자동 발송 체크 (1분마다 실행)"""
+        try:
+            now = datetime.now()
+            current_date = now.strftime("%Y-%m-%d")
+            current_time = now.strftime("%H:%M")
+            current_weekday = now.weekday()
+
+            for schedule in self.email_schedules:
+                if not schedule.get("enabled", True):
+                    continue
+
+                if schedule.get("send_time") != current_time:
+                    continue
+
+                if schedule.get("last_sent_date") == current_date:
+                    continue
+
+                should_send = False
+
+                if schedule.get("is_recurring", False):
+                    freq = schedule.get("frequency", "daily")
+                    if freq == "daily":
+                        should_send = True
+                    elif freq == "weekly":
+                        # 매주 발송: 지정된 요일인지 확인
+                        schedule_weekday = schedule.get("weekday", "monday")
+                        weekday_map = {
+                            "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+                            "friday": 4, "saturday": 5, "sunday": 6
+                        }
+                        target_weekday = weekday_map.get(schedule_weekday, 0)
+                        if current_weekday == target_weekday:
+                            should_send = True
+                else:
+                    if schedule.get("send_date") == current_date:
+                        should_send = True
+
+                if should_send:
+                    if self.send_email(schedule):
+                        # 발송 이력 업데이트
+                        schedule["last_sent_date"] = current_date
+                        schedule["last_sent_time"] = current_time
+                        schedule["total_sent_count"] = schedule.get("total_sent_count", 0) + 1
+
+                        if not schedule.get("is_recurring", False):
+                            schedule["enabled"] = False
+
+                        self.save_email_schedules()
+                        self.load_schedule_list()
+                        print(f"자동 발송 완료: {schedule['name']} (총 {schedule['total_sent_count']}회)")
+
+        except Exception as e:
+            print(f"자동 발송 체크 오류: {e}")
+
+    def add_schedule(self):
+        """새 예약 추가"""
+        try:
+            # 입력 검증
+            name = self.name_edit.text().strip()
+            subject = self.subject_edit.text().strip()
+            recipients = self.get_current_recipients()
+
+            if not name or not subject:
+                QMessageBox.warning(self, "입력 오류", "이름과 제목을 입력하세요.")
+                return
+
+            if not recipients:
+                QMessageBox.warning(self, "수신자 오류", "수신자를 최소 1명 추가하세요.")
+                return
+
+            # 내용 타입 수집
+            content_types = []
+            if self.all_check.isChecked(): content_types.append("all")
+            if self.done_check.isChecked(): content_types.append("completed")
+            if self.todo_check.isChecked(): content_types.append("incomplete")
+
+            if not content_types:
+                QMessageBox.warning(self, "내용 오류", "포함할 내용을 최소 1개 선택하세요.")
+                return
+
+            # 카테고리 선택 확인
+            selected_categories = self.get_selected_categories()
+            if selected_categories is not None and len(selected_categories) == 0:
+                QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
+                return
+
+            # 예약 데이터 생성
+            schedule = {
+                "id": datetime.now().strftime("%Y%m%d_%H%M%S"),
+                "name": name,
+                "custom_title": subject,
+                "recipients": recipients,
+                "content_types": content_types,
+                "period": self.period_combo.currentText(),
+                "send_time": self.time_edit.time().toString("HH:mm"),
+                "enabled": True,
+                "created_at": datetime.now().isoformat(),
+                "last_sent_date": None,
+                "last_sent_time": None,
+                "total_sent_count": 0,  # 발송 이력 필드 추가
+                "selected_categories": selected_categories  # 카테고리 필터 추가
+            }
+
+            # 발송 타입에 따라 설정
+            if self.once_radio.isChecked():
+                schedule["is_recurring"] = False
+                schedule["send_date"] = self.date_edit.date().toString("yyyy-MM-dd")
+            elif self.daily_radio.isChecked():
+                schedule["is_recurring"] = True
+                schedule["frequency"] = "daily"
+            elif self.weekly_radio.isChecked():
+                schedule["is_recurring"] = True
+                schedule["frequency"] = "weekly"
+                # 요일 정보 추가
+                weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+                selected_weekday = weekdays[self.weekday_combo.currentIndex()]
+                schedule["weekday"] = selected_weekday
+
+            # 저장
+            self.email_schedules.append(schedule)
+            self.save_email_schedules()
+            self.load_schedule_list()
+            self.clear_inputs()
+
+            QMessageBox.information(self, "성공", f"'{name}' 예약이 추가되었습니다!")
+
+        except Exception as e:
+            QMessageBox.critical(self, "오류", f"예약 추가 실패:\n{e}")
+
+    def load_email_schedules(self):
+        """예약 데이터 로드"""
+        try:
+            file_path = "data/email_schedules.json"
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding="utf-8") as f:
+                    schedules = json.load(f)
+
+                # 기존 예약에 발송 이력 필드가 없으면 추가
+                for schedule in schedules:
+                    if "last_sent_date" not in schedule:
+                        schedule["last_sent_date"] = None
+                    if "last_sent_time" not in schedule:
+                        schedule["last_sent_time"] = None
+                    if "total_sent_count" not in schedule:
+                        schedule["total_sent_count"] = 0
+
+                return schedules
+        except Exception as e:
+            print(f"예약 로드 오류: {e}")
+        return []
 
     def on_schedule_clicked(self, item):
         """예약 선택시"""

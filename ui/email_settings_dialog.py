@@ -487,7 +487,7 @@ class EmailSettingsDialog(QDialog):
         row1_layout = QHBoxLayout()
         row2_layout = QHBoxLayout()
 
-        for i, category in enumerate(self.storage_manager.categories):
+        for idx, category in enumerate(self.storage_manager.categories):
             check = QCheckBox(category.name)
             check.setChecked(True)
             check.stateChanged.connect(self.on_routine_category_check_changed)
@@ -496,7 +496,7 @@ class EmailSettingsDialog(QDialog):
             self.routine_category_checks[category.name] = check
 
             # 2열로 배치
-            if i < 2:
+            if idx < 2:
                 row1_layout.addWidget(check)
             else:
                 row2_layout.addWidget(check)
@@ -644,10 +644,43 @@ class EmailSettingsDialog(QDialog):
             QMessageBox.warning(self, "이메일 오류", "올바른 이메일 주소를 입력하세요.")
             return
 
-        # 중복 확인
-        for i in range(self.recipients_list.count()):
-            if self.recipients_list.count() == 0:
-                QMessageBox.information(self, "목록 없음", "삭제할 주소가 없습니다.")
+        # 중복 확인 - 수정된 부분
+        existing_emails = []
+        for idx in range(self.recipients_list.count()):
+            existing_emails.append(self.recipients_list.item(idx).text())
+
+        if email in existing_emails:
+            QMessageBox.warning(self, "중복 오류", "이미 추가된 이메일 주소입니다.")
+            return
+
+        # 주소록에 추가
+        item = QListWidgetItem(email)
+        item.setToolTip(f"주소: {email}")
+        self.recipients_list.addItem(item)
+        self.recipient_edit.clear()
+        self.recipient_edit.setFocus()
+
+    def remove_recipient(self):
+        """선택한 주소 삭제"""
+        current_item = self.recipients_list.currentItem()
+        if current_item:
+            reply = QMessageBox.question(
+                self, "주소 삭제",
+                f"'{current_item.text()}'를 삭제하시겠습니까?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                row = self.recipients_list.row(current_item)
+                self.recipients_list.takeItem(row)
+        else:
+            QMessageBox.information(self, "선택 없음", "삭제할 주소를 선택하세요.")
+
+    def clear_all_recipients(self):
+        """모든 주소 삭제"""
+        if self.recipients_list.count() == 0:
+            QMessageBox.information(self, "목록 없음", "삭제할 주소가 없습니다.")
             return
 
         reply = QMessageBox.question(
@@ -667,8 +700,8 @@ class EmailSettingsDialog(QDialog):
 
             # 주소록 확인
             recipients = []
-            for i in range(self.recipients_list.count()):
-                recipients.append(self.recipients_list.item(i).text())
+            for idx in range(self.recipients_list.count()):
+                recipients.append(self.recipients_list.item(idx).text())
 
             if not recipients:
                 QMessageBox.warning(self, "주소록 없음", "테스트 메일을 보낼 주소가 없습니다.\n먼저 주소록에 이메일을 추가하세요.")
@@ -747,8 +780,8 @@ class EmailSettingsDialog(QDialog):
         """주소록에서 수신자 선택"""
         # 현재 주소록 가져오기
         address_book = []
-        for i in range(self.recipients_list.count()):
-            address_book.append(self.recipients_list.item(i).text())
+        for idx in range(self.recipients_list.count()):
+            address_book.append(self.recipients_list.item(idx).text())
 
         if not address_book:
             QMessageBox.warning(self, "주소록 없음", "주소록이 비어있습니다.\n먼저 주소록 탭에서 이메일 주소를 추가하세요.")
@@ -806,6 +839,10 @@ class EmailSettingsDialog(QDialog):
             routine_data["id"] = datetime.now().strftime("%Y%m%d_%H%M%S")
             routine_data["created_at"] = datetime.now().isoformat()
             routine_data["enabled"] = True
+            # 발송 이력 필드 추가
+            routine_data["last_sent_date"] = None
+            routine_data["last_sent_time"] = None
+            routine_data["total_sent_count"] = 0
 
             self.daily_routines.append(routine_data)
             self.refresh_routine_list()
@@ -825,12 +862,17 @@ class EmailSettingsDialog(QDialog):
             routine_data = self.collect_routine_data()
 
             # 기존 루틴 찾아서 업데이트
-            for i, routine in enumerate(self.daily_routines):
+            for idx, routine in enumerate(self.daily_routines):
                 if routine["id"] == self.editing_routine_id:
                     routine_data["id"] = self.editing_routine_id
                     routine_data["created_at"] = routine.get("created_at", datetime.now().isoformat())
                     routine_data["enabled"] = routine.get("enabled", True)
-                    self.daily_routines[i] = routine_data
+                    # 발송 이력 유지
+                    routine_data["last_sent_date"] = routine.get("last_sent_date")
+                    routine_data["last_sent_time"] = routine.get("last_sent_time")
+                    routine_data["total_sent_count"] = routine.get("total_sent_count", 0)
+
+                    self.daily_routines[idx] = routine_data
                     break
 
             self.refresh_routine_list()
@@ -1033,7 +1075,7 @@ class EmailSettingsDialog(QDialog):
         self.routine_memo_edit.clear()
 
     def refresh_routine_list(self):
-        """루틴 목록 새로고침"""
+        """루틴 목록 새로고침 - 발송 이력 포함"""
         self.routine_list.clear()
 
         for routine in self.daily_routines:
@@ -1061,7 +1103,17 @@ class EmailSettingsDialog(QDialog):
                 else:
                     category_info = f" [{', '.join(selected_categories[:2])} 외 {len(selected_categories) - 2}개]"
 
-            display_text = f"{enabled} {name}\n{weekday_str} {time} | {recipient_count}명{category_info}"
+            # 발송 이력 정보 추가
+            last_sent_info = ""
+            last_sent_date = routine.get("last_sent_date")
+            total_sent = routine.get("total_sent_count", 0)
+
+            if last_sent_date:
+                last_sent_info = f"\n최근발송: {last_sent_date} | 총 {total_sent}회"
+            elif total_sent > 0:
+                last_sent_info = f"\n총 발송: {total_sent}회"
+
+            display_text = f"{enabled} {name}\n{weekday_str} {time} | {recipient_count}명{category_info}{last_sent_info}"
 
             item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, routine)
@@ -1089,8 +1141,8 @@ class EmailSettingsDialog(QDialog):
         try:
             # 주소록 수집
             recipients = []
-            for i in range(self.recipients_list.count()):
-                recipients.append(self.recipients_list.item(i).text())
+            for idx in range(self.recipients_list.count()):
+                recipients.append(self.recipients_list.item(idx).text())
 
             # 이메일 설정 저장
             email_settings = {
@@ -1150,7 +1202,18 @@ class EmailSettingsDialog(QDialog):
             routines_file = "data/daily_routines.json"
             if os.path.exists(routines_file):
                 with open(routines_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    routines = json.load(f)
+
+                # 기존 루틴에 발송 이력 필드가 없으면 추가
+                for routine in routines:
+                    if "last_sent_date" not in routine:
+                        routine["last_sent_date"] = None
+                    if "last_sent_time" not in routine:
+                        routine["last_sent_time"] = None
+                    if "total_sent_count" not in routine:
+                        routine["total_sent_count"] = 0
+
+                return routines
         except Exception as e:
             print(f"데일리 루틴 로드 중 오류: {e}")
 
@@ -1172,48 +1235,3 @@ class EmailSettingsDialog(QDialog):
     def accept(self):
         """대화상자 확인"""
         super().accept()
-        if self.recipients_list.item(i).text() == email:
-            QMessageBox.warning(self, "중복 오류", "이미 추가된 이메일 주소입니다.")
-            return
-
-        # 주소록에 추가
-        item = QListWidgetItem(email)
-        item.setToolTip(f"주소: {email}")
-        self.recipients_list.addItem(item)
-        self.recipient_edit.clear()
-        self.recipient_edit.setFocus()
-
-
-    def remove_recipient(self):
-        """선택한 주소 삭제"""
-        current_item = self.recipients_list.currentItem()
-        if current_item:
-            reply = QMessageBox.question(
-                self, "주소 삭제",
-                f"'{current_item.text()}'를 삭제하시겠습니까?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
-            )
-
-            if reply == QMessageBox.StandardButton.Yes:
-                row = self.recipients_list.row(current_item)
-                self.recipients_list.takeItem(row)
-        else:
-            QMessageBox.information(self, "선택 없음", "삭제할 주소를 선택하세요.")
-
-
-    def clear_all_recipients(self):
-        """모든 주소 삭제"""
-        if self.recipients_list.count() == 0:
-            QMessageBox.information(self, "목록 없음", "삭제할 주소가 없습니다.")
-            return
-
-        reply = QMessageBox.question(
-            self, "전체 삭제",
-            f"모든 주소({self.recipients_list.count()}개)를 삭제하시겠습니까?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-
-        if reply == QMessageBox.StandardButton.Yes:
-            self.recipients_list.clear()

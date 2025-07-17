@@ -221,7 +221,7 @@ class DailyReportDialog(QDialog):
 
         content_layout.addWidget(recipient_group)
 
-        # === 카테고리 필터 (새로 추가) ===
+        # === 카테고리 필터 ===
         category_group = QGroupBox("카테고리 필터")
         category_layout = QVBoxLayout(category_group)
 
@@ -381,7 +381,9 @@ class DailyReportDialog(QDialog):
 
     def get_selected_categories(self):
         """선택된 카테고리 목록 반환"""
-        if self.all_categories_check.isChecked():
+        # 수정: 모든 카테고리 체크박스와 개별 체크박스 상태 모두 확인
+        if self.all_categories_check.isChecked() and all(check.isChecked() for check in self.category_checks.values()):
+            print("카테고리 필터: 모든 카테고리 선택됨")
             return None  # 모든 카테고리
 
         selected_categories = []
@@ -389,6 +391,7 @@ class DailyReportDialog(QDialog):
             if check.isChecked():
                 selected_categories.append(category_name)
 
+        print(f"카테고리 필터: 선택된 카테고리 = {selected_categories}")
         return selected_categories if selected_categories else None
 
     def load_default_settings(self):
@@ -490,23 +493,30 @@ class DailyReportDialog(QDialog):
 
     def collect_tasks_data(self, date_str):
         """지정된 날짜의 작업 데이터 수집 (카테고리 필터 적용)"""
+        # 1단계: 해당 날짜에 생성된 작업만 먼저 필터링
         all_tasks = self.storage_manager.get_tasks_by_date(date_str)
-        # 해당 날짜에 생성된 작업만 필터링 (다른 날짜의 중요 작업 제외)
         date_tasks = [t for t in all_tasks if t.created_date == date_str]
 
-        # 카테고리 필터 적용
+        print(f"1단계 - 날짜별 필터링: {date_str}에 생성된 작업 {len(date_tasks)}개")
+
+        # 2단계: 카테고리 필터 적용
         selected_categories = self.get_selected_categories()
         if selected_categories is not None:  # 특정 카테고리만 선택된 경우
-            date_tasks = [t for t in date_tasks if t.category in selected_categories]
+            filtered_tasks = [t for t in date_tasks if t.category in selected_categories]
+            print(f"2단계 - 카테고리 필터링: {selected_categories} 카테고리로 필터링 -> {len(filtered_tasks)}개 작업")
+        else:
+            filtered_tasks = date_tasks
+            print(f"2단계 - 카테고리 필터링: 모든 카테고리 포함 -> {len(filtered_tasks)}개 작업")
 
         return {
-            "all": date_tasks,
-            "completed": [t for t in date_tasks if t.completed],
-            "incomplete": [t for t in date_tasks if not t.completed],
-            "total": len(date_tasks),
-            "completed_count": len([t for t in date_tasks if t.completed]),
+            "all": filtered_tasks,
+            "completed": [t for t in filtered_tasks if t.completed],
+            "incomplete": [t for t in filtered_tasks if not t.completed],
+            "total": len(filtered_tasks),
+            "completed_count": len([t for t in filtered_tasks if t.completed]),
             "completion_rate": (
-                    len([t for t in date_tasks if t.completed]) / len(date_tasks) * 100) if date_tasks else 0
+                    len([t for t in filtered_tasks if t.completed]) / len(
+                filtered_tasks) * 100) if filtered_tasks else 0
         }
 
     def create_preview_text(self, tasks_data, date_str):
@@ -657,18 +667,31 @@ class DailyReportDialog(QDialog):
             return False
 
     def create_html_report(self, tasks_data, date_str, is_test=False):
-        """HTML 데일리 리포트 생성 (Outlook 호환성 개선)"""
+        """HTML 데일리 리포트 생성 (Outlook 호환성 개선 + 카테고리 필터 정보 추가)"""
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
         report_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y년 %m월 %d일")
 
-        # 카테고리 필터 정보
+        # 카테고리 필터 정보 - 수정된 로직
         selected_categories = self.get_selected_categories()
         category_filter_info = ""
-        if selected_categories is not None:
+
+        print(f"HTML 생성 시 카테고리 필터: {selected_categories}")  # 디버그
+
+        if selected_categories is not None and len(selected_categories) > 0:
+            # 특정 카테고리가 선택된 경우
             category_filter_info = f'''
             <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 5px; margin-bottom: 20px;">
                 <tr><td style="text-align: center;">
                     <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
+                </td></tr>
+            </table>
+            '''
+        else:
+            # 모든 카테고리가 선택된 경우
+            category_filter_info = f'''
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center;">
+                    <strong>📂 포함된 카테고리:</strong> 모든 카테고리
                 </td></tr>
             </table>
             '''

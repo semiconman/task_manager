@@ -117,6 +117,62 @@ class DailyRoutineChecker:
             # 메일 발송
             mail.Send()
 
+            # 발송 이력 업데이트
+            self.update_routine_send_history(routine["id"])
+
+            print(f"루틴 리포트 발송 완료: {routine.get('name', 'Unknown')}")
+            return True
+
+        except Exception as e:
+            print(f"루틴 리포트 발송 중 오류: {e}")
+            return False
+
+    def update_routine_send_history(self, routine_id):
+        """루틴 발송 이력 업데이트"""
+        try:
+            current_time = datetime.now()
+            current_date = current_time.strftime("%Y-%m-%d")
+            current_time_str = current_time.strftime("%H:%M")
+
+            # 루틴 파일 로드
+            routines = self.load_routines()
+
+            # 해당 루틴 찾아서 이력 업데이트
+            for routine in routines:
+                if routine.get("id") == routine_id:
+                    routine["last_sent_date"] = current_date
+                    routine["last_sent_time"] = current_time_str
+                    routine["total_sent_count"] = routine.get("total_sent_count", 0) + 1
+                    print(
+                        f"루틴 '{routine.get('name')}' 발송 이력 업데이트: {current_date} {current_time_str} (총 {routine['total_sent_count']}회)")
+                    break
+
+            # 업데이트된 루틴 저장
+            self.save_routines(routines)
+
+        except Exception as e:
+            print(f"루틴 발송 이력 업데이트 중 오류: {e}")
+
+    def save_routines(self, routines):
+        """루틴 목록 저장"""
+        try:
+            os.makedirs("data", exist_ok=True)
+            with open(self.routines_file, "w", encoding="utf-8") as f:
+                json.dump(routines, f, ensure_ascii=False, indent=2)
+            print("루틴 데이터 저장 완료")
+        except Exception as e:
+            print(f"루틴 저장 중 오류: {e}").To = "; ".join(recipients)
+
+            # 작업 데이터 수집 (카테고리 필터 적용)
+            tasks_data = self.collect_tasks_data(date_str, routine.get("selected_categories"))
+
+            # HTML 메일 내용 생성
+            html_body = self.create_routine_html_report(routine, tasks_data, date_str)
+            mail.HTMLBody = html_body
+
+            # 메일 발송
+            mail.Send()
+
             print(f"루틴 리포트 발송 완료: {routine.get('name', 'Unknown')}")
             return True
 
@@ -127,22 +183,28 @@ class DailyRoutineChecker:
     def collect_tasks_data(self, date_str, selected_categories=None):
         """지정된 날짜의 작업 데이터 수집 (카테고리 필터 적용)"""
         all_tasks = self.storage_manager.get_tasks_by_date(date_str)
-        # 해당 날짜에 생성된 작업만 필터링
-        date_tasks = [t for t in all_tasks if t.created_date == date_str]
 
-        # 카테고리 필터 적용
-        if selected_categories is not None:  # 특정 카테고리만 선택된 경우
-            date_tasks = [t for t in date_tasks if t.category in selected_categories]
-            print(f"루틴 카테고리 필터 적용: {selected_categories} -> {len(date_tasks)}개 작업")
+        # 1단계: 해당 날짜에 생성된 작업만 필터링
+        date_tasks = [t for t in all_tasks if t.created_date == date_str]
+        print(f"루틴 - 1단계 날짜별 필터링: {date_str}에 생성된 작업 {len(date_tasks)}개")
+
+        # 2단계: 카테고리 필터 적용
+        if selected_categories is not None and len(selected_categories) > 0:  # 특정 카테고리만 선택된 경우
+            filtered_tasks = [t for t in date_tasks if t.category in selected_categories]
+            print(f"루틴 - 2단계 카테고리 필터링: {selected_categories} 카테고리로 필터링 -> {len(filtered_tasks)}개 작업")
+        else:
+            filtered_tasks = date_tasks
+            print(f"루틴 - 2단계 카테고리 필터링: 모든 카테고리 포함 -> {len(filtered_tasks)}개 작업")
 
         return {
-            "all": date_tasks,
-            "completed": [t for t in date_tasks if t.completed],
-            "incomplete": [t for t in date_tasks if not t.completed],
-            "total": len(date_tasks),
-            "completed_count": len([t for t in date_tasks if t.completed]),
+            "all": filtered_tasks,
+            "completed": [t for t in filtered_tasks if t.completed],
+            "incomplete": [t for t in filtered_tasks if not t.completed],
+            "total": len(filtered_tasks),
+            "completed_count": len([t for t in filtered_tasks if t.completed]),
             "completion_rate": (
-                        len([t for t in date_tasks if t.completed]) / len(date_tasks) * 100) if date_tasks else 0
+                    len([t for t in filtered_tasks if t.completed]) / len(
+                filtered_tasks) * 100) if filtered_tasks else 0
         }
 
     def create_routine_html_report(self, routine, tasks_data, date_str):
@@ -158,14 +220,26 @@ class DailyRoutineChecker:
         </div>
         '''
 
-        # 카테고리 필터 정보
-        category_filter_info = ""
+        # 카테고리 필터 정보 - 수정된 로직
         selected_categories = routine.get("selected_categories")
-        if selected_categories is not None:
+        category_filter_info = ""
+
+        print(f"루틴 HTML 생성 시 카테고리 필터: {selected_categories}")  # 디버그
+
+        if selected_categories is not None and len(selected_categories) > 0:
+            # 특정 카테고리가 선택된 경우
             category_filter_info = f'''
             <div style="background: #d1ecf1; padding: 15px; margin-bottom: 20px; border-radius: 8px; border-left: 4px solid #bee5eb;">
                 <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
                 <div style="font-size: 12px; color: #0c5460; margin-top: 5px;">선택한 카테고리의 작업만 포함됩니다.</div>
+            </div>
+            '''
+        else:
+            # 모든 카테고리가 선택된 경우
+            category_filter_info = f'''
+            <div style="background: #d4edda; padding: 15px; margin-bottom: 20px; border-radius: 8px; border-left: 4px solid #c3e6cb;">
+                <strong>📂 포함된 카테고리:</strong> 모든 카테고리
+                <div style="font-size: 12px; color: #155724; margin-top: 5px;">모든 카테고리의 작업이 포함됩니다.</div>
             </div>
             '''
 

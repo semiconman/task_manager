@@ -82,13 +82,24 @@ class EmailSender:
         # 현재 시간
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
 
-        # 카테고리 필터 정보
+        # 카테고리 필터 정보 - 수정된 로직
         selected_categories = settings.get("selected_categories")
         category_filter_info = ""
-        if selected_categories is not None:
+
+        print(f"EmailSender - 카테고리 필터: {selected_categories}")  # 디버그
+
+        if selected_categories is not None and len(selected_categories) > 0:
+            # 특정 카테고리가 선택된 경우
             category_filter_info = f'''
             <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
                 <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
+            </div>
+            '''
+        else:
+            # 모든 카테고리가 선택된 경우 (None이거나 빈 리스트)
+            category_filter_info = f'''
+            <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #28a745;">
+                <strong>📂 포함된 카테고리:</strong> 모든 카테고리
             </div>
             '''
 
@@ -228,26 +239,32 @@ class EmailSender:
         # 오늘 작업만 간단하게 가져오기
         today = datetime.now().strftime("%Y-%m-%d")
         daily_tasks = self.storage_manager.get_tasks_by_date(today)
-        all_tasks = [t for t in daily_tasks if t.created_date == today]
 
-        # 카테고리 필터 적용
+        # 1단계: 해당 날짜에 생성된 작업만 먼저 필터링
+        all_tasks = [t for t in daily_tasks if t.created_date == today]
+        print(f"EmailSender - 1단계 날짜별 필터링: {today}에 생성된 작업 {len(all_tasks)}개")
+
+        # 2단계: 카테고리 필터 적용
         selected_categories = settings.get("selected_categories")
-        if selected_categories is not None:  # 특정 카테고리만 선택된 경우
-            all_tasks = [t for t in all_tasks if t.category in selected_categories]
-            print(f"카테고리 필터 적용: {selected_categories} -> {len(all_tasks)}개 작업")
+        if selected_categories is not None and len(selected_categories) > 0:  # 특정 카테고리만 선택된 경우
+            filtered_tasks = [t for t in all_tasks if t.category in selected_categories]
+            print(f"EmailSender - 2단계 카테고리 필터링: {selected_categories} 카테고리로 필터링 -> {len(filtered_tasks)}개 작업")
+        else:
+            filtered_tasks = all_tasks
+            print(f"EmailSender - 2단계 카테고리 필터링: 모든 카테고리 포함 -> {len(filtered_tasks)}개 작업")
 
         # 통계 계산
-        total = len(all_tasks)
-        completed = len([t for t in all_tasks if t.completed])
+        total = len(filtered_tasks)
+        completed = len([t for t in filtered_tasks if t.completed])
         incomplete = total - completed
         completion_rate = (completed / total * 100) if total > 0 else 0
 
         return {
             "period": period,
             "tasks": {
-                "all": all_tasks,
-                "completed": [t for t in all_tasks if t.completed],
-                "incomplete": [t for t in all_tasks if not t.completed]
+                "all": filtered_tasks,
+                "completed": [t for t in filtered_tasks if t.completed],
+                "incomplete": [t for t in filtered_tasks if not t.completed]
             },
             "stats": {
                 "total": total,
