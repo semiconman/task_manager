@@ -7,7 +7,8 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QCheckBox, QGroupBox, QDateEdit, QTextEdit,
-    QListWidget, QListWidgetItem, QMessageBox, QDialogButtonBox, QFrame
+    QListWidget, QListWidgetItem, QMessageBox, QDialogButtonBox, QFrame,
+    QScrollArea, QWidget
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont
@@ -118,8 +119,8 @@ class DailyReportDialog(QDialog):
         self.selected_recipients = []
 
         self.setWindowTitle("데일리 리포트")
-        self.setMinimumSize(650, 520)
-        self.setMaximumSize(750, 620)
+        self.setMinimumSize(700, 600)
+        self.setMaximumSize(800, 700)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.init_ui()
@@ -128,16 +129,25 @@ class DailyReportDialog(QDialog):
     def init_ui(self):
         """UI 초기화"""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)  # 간격 줄임
+        layout.setSpacing(10)
 
         # 제목
         title_label = QLabel("데일리 리포트 발송")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold; padding: 5px; color: #333;")
         layout.addWidget(title_label)
 
+        # 스크롤 영역 생성
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        # 스크롤 컨텐츠 위젯
+        scroll_content = QWidget()
+        content_layout = QVBoxLayout(scroll_content)
+
         # === 기본 정보 (2열로 배치) ===
         basic_group = QGroupBox("기본 정보")
-        basic_layout = QHBoxLayout(basic_group)  # 가로 배치로 변경
+        basic_layout = QHBoxLayout(basic_group)
 
         # 왼쪽: 제목
         left_layout = QVBoxLayout()
@@ -154,11 +164,11 @@ class DailyReportDialog(QDialog):
         self.date_edit.setCalendarPopup(True)
         right_layout.addWidget(self.date_edit)
 
-        basic_layout.addLayout(left_layout, 2)  # 제목이 더 넓게
-        basic_layout.addLayout(right_layout, 1)  # 날짜는 좁게
-        layout.addWidget(basic_group)
+        basic_layout.addLayout(left_layout, 2)
+        basic_layout.addLayout(right_layout, 1)
+        content_layout.addWidget(basic_group)
 
-        # === 수신자 선택 (컴팩트하게) ===
+        # === 수신자 선택 ===
         recipient_group = QGroupBox("수신자 선택")
         recipient_layout = QVBoxLayout(recipient_group)
 
@@ -193,10 +203,10 @@ class DailyReportDialog(QDialog):
         self.selected_recipients_label = QLabel("선택된 수신자: 없음")
         self.selected_recipients_label.setStyleSheet(
             "color: #666; margin: 8px 0; padding: 12px; background: #f8f9fa; border-radius: 4px; min-height: 20px;")
-        self.selected_recipients_label.setWordWrap(True)  # 긴 수신자 목록을 위한 줄바꿈
+        self.selected_recipients_label.setWordWrap(True)
         recipient_layout.addWidget(self.selected_recipients_label)
 
-        # 수신자 직접 추가 (한 줄로)
+        # 수신자 직접 추가
         direct_add_layout = QHBoxLayout()
         self.recipient_edit = QLineEdit()
         self.recipient_edit.setPlaceholderText("이메일 직접 입력")
@@ -209,23 +219,64 @@ class DailyReportDialog(QDialog):
         direct_add_layout.addWidget(add_recipient_btn, 1)
         recipient_layout.addLayout(direct_add_layout)
 
-        layout.addWidget(recipient_group)
+        content_layout.addWidget(recipient_group)
+
+        # === 카테고리 필터 (새로 추가) ===
+        category_group = QGroupBox("카테고리 필터")
+        category_layout = QVBoxLayout(category_group)
+
+        # 안내 메시지
+        category_info = QLabel("특정 카테고리의 작업만 포함하려면 선택하세요. 전체 선택 시 모든 카테고리가 포함됩니다.")
+        category_info.setStyleSheet("color: #666; font-size: 11px; margin-bottom: 8px;")
+        category_info.setWordWrap(True)
+        category_layout.addWidget(category_info)
+
+        # 전체 선택 체크박스
+        category_select_layout = QHBoxLayout()
+        self.all_categories_check = QCheckBox("모든 카테고리")
+        self.all_categories_check.setChecked(True)
+        self.all_categories_check.stateChanged.connect(self.on_all_categories_changed)
+        category_select_layout.addWidget(self.all_categories_check)
+
+        # 카테고리별 체크박스
+        self.category_checks = {}
+        for category in self.storage_manager.categories:
+            check = QCheckBox(category.name)
+            check.setChecked(True)
+            check.stateChanged.connect(self.on_category_check_changed)
+
+            # 카테고리 색상으로 표시
+            check.setStyleSheet(f"""
+                QCheckBox {{
+                    color: {category.color};
+                    font-weight: bold;
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: {category.color};
+                }}
+            """)
+
+            self.category_checks[category.name] = check
+            category_select_layout.addWidget(check)
+
+        category_layout.addLayout(category_select_layout)
+        content_layout.addWidget(category_group)
 
         # === 포함 내용 + 추가 메모 (2열로 배치) ===
         content_memo_layout = QHBoxLayout()
 
         # 왼쪽: 포함 내용
         content_group = QGroupBox("포함 내용")
-        content_layout = QVBoxLayout(content_group)
+        content_layout_inner = QVBoxLayout(content_group)
 
         self.all_tasks_check = QCheckBox("전체 작업")
         self.all_tasks_check.setChecked(True)
         self.completed_tasks_check = QCheckBox("완료된 작업만")
         self.incomplete_tasks_check = QCheckBox("미완료 작업만")
 
-        content_layout.addWidget(self.all_tasks_check)
-        content_layout.addWidget(self.completed_tasks_check)
-        content_layout.addWidget(self.incomplete_tasks_check)
+        content_layout_inner.addWidget(self.all_tasks_check)
+        content_layout_inner.addWidget(self.completed_tasks_check)
+        content_layout_inner.addWidget(self.incomplete_tasks_check)
 
         # 오른쪽: 추가 메모
         memo_group = QGroupBox("추가 메모")
@@ -233,12 +284,12 @@ class DailyReportDialog(QDialog):
 
         self.memo_edit = QTextEdit()
         self.memo_edit.setPlaceholderText("추가 메모...")
-        self.memo_edit.setMaximumHeight(80)  # 조금 더 키움
+        self.memo_edit.setMaximumHeight(80)
         memo_layout.addWidget(self.memo_edit)
 
         content_memo_layout.addWidget(content_group, 1)
         content_memo_layout.addWidget(memo_group, 2)
-        layout.addLayout(content_memo_layout)
+        content_layout.addLayout(content_memo_layout)
 
         # === 미리보기 ===
         preview_group = QGroupBox("리포트 미리보기")
@@ -265,11 +316,15 @@ class DailyReportDialog(QDialog):
 
         self.preview_text = QTextEdit()
         self.preview_text.setReadOnly(True)
-        self.preview_text.setMaximumHeight(120)  # 미리보기도 조금 키움
+        self.preview_text.setMaximumHeight(120)
         self.preview_text.setStyleSheet("background: #f8f9fa; border: 1px solid #dee2e6; font-size: 11px;")
         preview_layout.addWidget(self.preview_text)
 
-        layout.addWidget(preview_group)
+        content_layout.addWidget(preview_group)
+
+        # 스크롤 영역 설정
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area)
 
         # === 버튼 ===
         button_layout = QHBoxLayout()
@@ -301,6 +356,41 @@ class DailyReportDialog(QDialog):
 
         layout.addLayout(button_layout)
 
+    def on_all_categories_changed(self, state):
+        """모든 카테고리 체크박스 상태 변경"""
+        checked = state == Qt.CheckState.Checked
+        for check in self.category_checks.values():
+            check.setChecked(checked)
+
+    def on_category_check_changed(self):
+        """개별 카테고리 체크박스 상태 변경"""
+        # 모든 카테고리가 선택되었는지 확인
+        all_checked = all(check.isChecked() for check in self.category_checks.values())
+        any_checked = any(check.isChecked() for check in self.category_checks.values())
+
+        # 전체 선택 체크박스 상태 업데이트
+        self.all_categories_check.blockSignals(True)
+        if all_checked:
+            self.all_categories_check.setChecked(True)
+        elif not any_checked:
+            self.all_categories_check.setChecked(False)
+        else:
+            self.all_categories_check.setTristate(True)
+            self.all_categories_check.setCheckState(Qt.CheckState.PartiallyChecked)
+        self.all_categories_check.blockSignals(False)
+
+    def get_selected_categories(self):
+        """선택된 카테고리 목록 반환"""
+        if self.all_categories_check.isChecked():
+            return None  # 모든 카테고리
+
+        selected_categories = []
+        for category_name, check in self.category_checks.items():
+            if check.isChecked():
+                selected_categories.append(category_name)
+
+        return selected_categories if selected_categories else None
+
     def load_default_settings(self):
         """기본 설정 로드"""
         # 오늘 날짜로 기본 제목 설정
@@ -309,7 +399,7 @@ class DailyReportDialog(QDialog):
         self.subject_edit.setText(default_subject)
 
     def select_recipients_from_address_book(self):
-        """주소록에서 수신자 선택 (simple_email_dialog 방식과 동일)"""
+        """주소록에서 수신자 선택"""
         try:
             # 주소록 로드
             address_book = self.load_address_book()
@@ -341,7 +431,7 @@ class DailyReportDialog(QDialog):
         return []
 
     def update_selected_recipients_display(self):
-        """선택된 수신자 표시 업데이트 (simple_email_dialog와 동일한 로직)"""
+        """선택된 수신자 표시 업데이트"""
         count = len(self.selected_recipients)
         if count == 0:
             self.selected_recipients_label.setText("선택된 수신자: 없음")
@@ -361,7 +451,7 @@ class DailyReportDialog(QDialog):
                 "color: #333; margin: 10px 0; padding: 10px; background: #e8f5e8; border-radius: 4px; border: 1px solid #4CAF50;")
 
     def add_recipient_directly(self):
-        """수신자 직접 추가 (simple_email_dialog와 동일)"""
+        """수신자 직접 추가"""
         email = self.recipient_edit.text().strip()
         if not email:
             return
@@ -380,7 +470,7 @@ class DailyReportDialog(QDialog):
         self.recipient_edit.clear()
 
     def clear_recipients(self):
-        """모든 수신자 해제 (simple_email_dialog와 동일)"""
+        """모든 수신자 해제"""
         self.selected_recipients = []
         self.update_selected_recipients_display()
 
@@ -399,10 +489,15 @@ class DailyReportDialog(QDialog):
             QMessageBox.critical(self, "미리보기 오류", f"미리보기 생성 중 오류가 발생했습니다:\n{e}")
 
     def collect_tasks_data(self, date_str):
-        """지정된 날짜의 작업 데이터 수집"""
+        """지정된 날짜의 작업 데이터 수집 (카테고리 필터 적용)"""
         all_tasks = self.storage_manager.get_tasks_by_date(date_str)
         # 해당 날짜에 생성된 작업만 필터링 (다른 날짜의 중요 작업 제외)
         date_tasks = [t for t in all_tasks if t.created_date == date_str]
+
+        # 카테고리 필터 적용
+        selected_categories = self.get_selected_categories()
+        if selected_categories is not None:  # 특정 카테고리만 선택된 경우
+            date_tasks = [t for t in date_tasks if t.category in selected_categories]
 
         return {
             "all": date_tasks,
@@ -417,6 +512,13 @@ class DailyReportDialog(QDialog):
     def create_preview_text(self, tasks_data, date_str):
         """미리보기 텍스트 생성"""
         preview = f"=== {date_str} 일일 업무 보고 ===\n\n"
+
+        # 카테고리 필터 정보 표시
+        selected_categories = self.get_selected_categories()
+        if selected_categories is not None:
+            preview += f"📂 포함된 카테고리: {', '.join(selected_categories)}\n\n"
+        else:
+            preview += f"📂 포함된 카테고리: 모든 카테고리\n\n"
 
         # 통계
         preview += f"업무 현황\n"
@@ -508,6 +610,12 @@ class DailyReportDialog(QDialog):
             QMessageBox.warning(self, "내용 선택 오류", "포함할 내용을 최소 1개 선택하세요.")
             return False
 
+        # 카테고리 선택 확인
+        selected_categories = self.get_selected_categories()
+        if selected_categories is not None and len(selected_categories) == 0:
+            QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
+            return False
+
         return True
 
     def send_daily_report(self, is_test=False):
@@ -531,7 +639,7 @@ class DailyReportDialog(QDialog):
             # 선택된 날짜
             selected_date = self.date_edit.date().toString("yyyy-MM-dd")
 
-            # 작업 데이터 수집
+            # 작업 데이터 수집 (카테고리 필터 적용)
             tasks_data = self.collect_tasks_data(selected_date)
 
             # HTML 메일 내용 생성
@@ -552,6 +660,18 @@ class DailyReportDialog(QDialog):
         """HTML 데일리 리포트 생성 (Outlook 호환성 개선)"""
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
         report_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y년 %m월 %d일")
+
+        # 카테고리 필터 정보
+        selected_categories = self.get_selected_categories()
+        category_filter_info = ""
+        if selected_categories is not None:
+            category_filter_info = f'''
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center;">
+                    <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
+                </td></tr>
+            </table>
+            '''
 
         # 테스트 메시지 (Outlook 호환)
         test_message = ""
@@ -633,6 +753,7 @@ class DailyReportDialog(QDialog):
                                 <td style="padding: 25px 20px;">
 
                                     {test_message}
+                                    {category_filter_info}
 
                                     <!-- 데일리 리포트 요약 -->
                                     <table width="100%" cellpadding="20" cellspacing="0" style="background-color: #e3f2fd; border-radius: 10px; margin-bottom: 20px;">
@@ -739,7 +860,7 @@ class DailyReportDialog(QDialog):
                         <tr>
                             <td style="{text_style}">
                                 <strong>{status} {importance}{self.escape_html(task.title)}</strong>
-                                <span style="background-color: #e0e0e0; color: #666; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">
+                                <span style="background-color: {self.get_category_color(task.category)}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">
                                     {task.category}
                                 </span>
                             </td>

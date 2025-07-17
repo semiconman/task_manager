@@ -8,7 +8,7 @@ from utils.email_sender import EmailSender
 
 
 class DailyRoutineChecker:
-    """데일리 리포트 루틴 자동 실행 체크"""
+    """데일리 리포트 루틴 자동 실행 체크 (카테고리 필터 지원)"""
 
     def __init__(self, storage_manager):
         self.storage_manager = storage_manager
@@ -75,7 +75,8 @@ class DailyRoutineChecker:
                 "recipients": routine.get("recipients", []),
                 "content_types": routine.get("content_types", ["all"]),
                 "period": "오늘",
-                "memo": routine.get("memo", "")
+                "memo": routine.get("memo", ""),
+                "selected_categories": routine.get("selected_categories")  # 카테고리 필터 추가
             }
 
             # 메일 발송 (데일리 리포트와 동일한 방식)
@@ -106,8 +107,8 @@ class DailyRoutineChecker:
 
             mail.To = "; ".join(recipients)
 
-            # 작업 데이터 수집
-            tasks_data = self.collect_tasks_data(date_str)
+            # 작업 데이터 수집 (카테고리 필터 적용)
+            tasks_data = self.collect_tasks_data(date_str, routine.get("selected_categories"))
 
             # HTML 메일 내용 생성
             html_body = self.create_routine_html_report(routine, tasks_data, date_str)
@@ -123,11 +124,16 @@ class DailyRoutineChecker:
             print(f"루틴 리포트 발송 중 오류: {e}")
             return False
 
-    def collect_tasks_data(self, date_str):
-        """지정된 날짜의 작업 데이터 수집"""
+    def collect_tasks_data(self, date_str, selected_categories=None):
+        """지정된 날짜의 작업 데이터 수집 (카테고리 필터 적용)"""
         all_tasks = self.storage_manager.get_tasks_by_date(date_str)
         # 해당 날짜에 생성된 작업만 필터링
         date_tasks = [t for t in all_tasks if t.created_date == date_str]
+
+        # 카테고리 필터 적용
+        if selected_categories is not None:  # 특정 카테고리만 선택된 경우
+            date_tasks = [t for t in date_tasks if t.category in selected_categories]
+            print(f"루틴 카테고리 필터 적용: {selected_categories} -> {len(date_tasks)}개 작업")
 
         return {
             "all": date_tasks,
@@ -140,7 +146,7 @@ class DailyRoutineChecker:
         }
 
     def create_routine_html_report(self, routine, tasks_data, date_str):
-        """루틴용 HTML 리포트 생성"""
+        """루틴용 HTML 리포트 생성 (카테고리 필터 정보 포함)"""
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
         report_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y년 %m월 %d일")
 
@@ -151,6 +157,17 @@ class DailyRoutineChecker:
             <div style="font-size: 12px; color: #0c5460; margin-top: 5px;">루틴명: {routine.get('name', 'Unknown')} | 자동 발송</div>
         </div>
         '''
+
+        # 카테고리 필터 정보
+        category_filter_info = ""
+        selected_categories = routine.get("selected_categories")
+        if selected_categories is not None:
+            category_filter_info = f'''
+            <div style="background: #d1ecf1; padding: 15px; margin-bottom: 20px; border-radius: 8px; border-left: 4px solid #bee5eb;">
+                <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
+                <div style="font-size: 12px; color: #0c5460; margin-top: 5px;">선택한 카테고리의 작업만 포함됩니다.</div>
+            </div>
+            '''
 
         # 통계 섹션
         stats_section = f'''
@@ -228,6 +245,7 @@ class DailyRoutineChecker:
                 </div>
                 <div class="content">
                     {routine_info}
+                    {category_filter_info}
                     {stats_section}
                     {task_sections}
                     {memo_section}

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QCheckBox, QGroupBox, QComboBox, QTimeEdit,
     QListWidget, QListWidgetItem, QMessageBox, QFrame,
-    QButtonGroup, QRadioButton, QDateEdit
+    QButtonGroup, QRadioButton, QDateEdit, QScrollArea, QWidget
 )
 from PyQt6.QtCore import Qt, QTime, QDate, QTimer
 from PyQt6.QtGui import QFont
@@ -29,7 +29,7 @@ class SimpleEmailDialog(QDialog):
         self.auto_timer.start(60000)
 
         self.setWindowTitle("📧 메일 관리")
-        self.setMinimumSize(900, 700)  # 세로 크기 증가
+        self.setMinimumSize(950, 750)  # 크기 증가 (카테고리 선택 영역 추가로)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.init_ui()
@@ -85,6 +85,14 @@ class SimpleEmailDialog(QDialog):
         add_title = QLabel("➕ 새 메일 예약")
         add_title.setStyleSheet("font-size: 16px; font-weight: bold; padding: 10px;")
         right_layout.addWidget(add_title)
+
+        # 스크롤 영역 (내용이 많아졌으므로)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
 
         # === 1. 기본 정보 ===
         basic_group = QGroupBox("기본 정보")
@@ -147,8 +155,7 @@ class SimpleEmailDialog(QDialog):
         recipient_layout.addLayout(recipient_control)
 
         basic_layout.addLayout(recipient_layout)
-
-        right_layout.addWidget(basic_group)
+        scroll_layout.addWidget(basic_group)
 
         # === 2. 발송 설정 ===
         schedule_group = QGroupBox("발송 설정")
@@ -168,7 +175,7 @@ class SimpleEmailDialog(QDialog):
         self.type_group.addButton(self.daily_radio)
         self.type_group.addButton(self.weekly_radio)
 
-        # 라디오 버튼 그룹 시그널 연결 (개별 toggled 대신 buttonClicked 사용)
+        # 라디오 버튼 그룹 시그널 연결
         self.type_group.buttonClicked.connect(self.on_type_changed)
 
         type_layout.addWidget(QLabel("타입:"))
@@ -217,10 +224,50 @@ class SimpleEmailDialog(QDialog):
         datetime_layout.addLayout(weekday_row)
 
         schedule_layout.addLayout(datetime_layout)
+        scroll_layout.addWidget(schedule_group)
 
-        right_layout.addWidget(schedule_group)
+        # === 3. 카테고리 필터 (새로 추가) ===
+        category_group = QGroupBox("카테고리 필터")
+        category_layout = QVBoxLayout(category_group)
 
-        # === 3. 내용 설정 ===
+        # 안내 메시지
+        category_info = QLabel("특정 카테고리의 작업만 포함하려면 선택하세요. 전체 선택 시 모든 카테고리가 포함됩니다.")
+        category_info.setStyleSheet("color: #666; font-size: 11px; margin-bottom: 8px;")
+        category_info.setWordWrap(True)
+        category_layout.addWidget(category_info)
+
+        # 전체 선택 체크박스
+        category_select_layout = QHBoxLayout()
+        self.all_categories_check = QCheckBox("모든 카테고리")
+        self.all_categories_check.setChecked(True)
+        self.all_categories_check.stateChanged.connect(self.on_all_categories_changed)
+        category_select_layout.addWidget(self.all_categories_check)
+
+        # 카테고리별 체크박스
+        self.category_checks = {}
+        for category in self.storage_manager.categories:
+            check = QCheckBox(category.name)
+            check.setChecked(True)
+            check.stateChanged.connect(self.on_category_check_changed)
+
+            # 카테고리 색상으로 표시
+            check.setStyleSheet(f"""
+                QCheckBox {{
+                    color: {category.color};
+                    font-weight: bold;
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: {category.color};
+                }}
+            """)
+
+            self.category_checks[category.name] = check
+            category_select_layout.addWidget(check)
+
+        category_layout.addLayout(category_select_layout)
+        scroll_layout.addWidget(category_group)
+
+        # === 4. 내용 설정 ===
         content_group = QGroupBox("메일 내용")
         content_layout = QHBoxLayout(content_group)
 
@@ -242,7 +289,11 @@ class SimpleEmailDialog(QDialog):
         content_layout.addWidget(self.period_combo)
         content_layout.addStretch()
 
-        right_layout.addWidget(content_group)
+        scroll_layout.addWidget(content_group)
+
+        # 스크롤 영역 설정
+        scroll_area.setWidget(scroll_content)
+        right_layout.addWidget(scroll_area)
 
         # === 버튼들 ===
         btn_layout = QVBoxLayout()
@@ -268,12 +319,46 @@ class SimpleEmailDialog(QDialog):
         btn_layout.addWidget(close_btn)
 
         right_layout.addLayout(btn_layout)
-        right_layout.addStretch()
 
         layout.addWidget(right_frame, 1)
 
         # 초기 상태 설정
         self.on_type_changed()
+
+    def on_all_categories_changed(self, state):
+        """모든 카테고리 체크박스 상태 변경"""
+        checked = state == Qt.CheckState.Checked
+        for check in self.category_checks.values():
+            check.setChecked(checked)
+
+    def on_category_check_changed(self):
+        """개별 카테고리 체크박스 상태 변경"""
+        # 모든 카테고리가 선택되었는지 확인
+        all_checked = all(check.isChecked() for check in self.category_checks.values())
+        any_checked = any(check.isChecked() for check in self.category_checks.values())
+
+        # 전체 선택 체크박스 상태 업데이트
+        self.all_categories_check.blockSignals(True)
+        if all_checked:
+            self.all_categories_check.setChecked(True)
+        elif not any_checked:
+            self.all_categories_check.setChecked(False)
+        else:
+            self.all_categories_check.setTristate(True)
+            self.all_categories_check.setCheckState(Qt.CheckState.PartiallyChecked)
+        self.all_categories_check.blockSignals(False)
+
+    def get_selected_categories(self):
+        """선택된 카테고리 목록 반환"""
+        if self.all_categories_check.isChecked():
+            return None  # 모든 카테고리
+
+        selected_categories = []
+        for category_name, check in self.category_checks.items():
+            if check.isChecked():
+                selected_categories.append(category_name)
+
+        return selected_categories if selected_categories else None
 
     def on_type_changed(self, button=None):
         """발송 타입 변경시 - 버튼 클릭 시에만 호출됨"""
@@ -464,6 +549,12 @@ class SimpleEmailDialog(QDialog):
                 QMessageBox.warning(self, "내용 오류", "포함할 내용을 최소 1개 선택하세요.")
                 return
 
+            # 카테고리 선택 확인
+            selected_categories = self.get_selected_categories()
+            if selected_categories is not None and len(selected_categories) == 0:
+                QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
+                return
+
             # 예약 데이터 생성
             schedule = {
                 "id": datetime.now().strftime("%Y%m%d_%H%M%S"),
@@ -476,7 +567,8 @@ class SimpleEmailDialog(QDialog):
                 "enabled": True,
                 "created_at": datetime.now().isoformat(),
                 "last_sent_date": None,
-                "last_sent_time": None
+                "last_sent_time": None,
+                "selected_categories": selected_categories  # 카테고리 필터 추가
             }
 
             # 발송 타입에 따라 설정
@@ -512,6 +604,12 @@ class SimpleEmailDialog(QDialog):
         self.recipients_list_widget.clear()
         self.recipient_edit.clear()
         self.once_radio.setChecked(True)
+
+        # 카테고리 선택 초기화
+        self.all_categories_check.setChecked(True)
+        for check in self.category_checks.values():
+            check.setChecked(True)
+
         self.on_type_changed()
 
     def load_schedule_list(self):
@@ -544,12 +642,21 @@ class SimpleEmailDialog(QDialog):
                 time_info = f"{date} {time}"
                 type_icon = "📧"
 
+            # 카테고리 필터 정보 추가
+            category_info = ""
+            selected_categories = schedule.get("selected_categories")
+            if selected_categories is not None:
+                if len(selected_categories) <= 2:
+                    category_info = f" [카테고리: {', '.join(selected_categories)}]"
+                else:
+                    category_info = f" [카테고리: {', '.join(selected_categories[:2])} 외 {len(selected_categories) - 2}개]"
+
             # 마지막 발송 정보 추가
             last_sent_info = ""
             if schedule.get("last_sent_date") and schedule.get("last_sent_time"):
                 last_sent_info = f" [최근발송: {schedule['last_sent_date']} {schedule['last_sent_time']}]"
 
-            display_text = f"{enabled} {type_icon} {name} | {time_info}{last_sent_info}"
+            display_text = f"{enabled} {type_icon} {name} | {time_info}{category_info}{last_sent_info}"
 
             item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, schedule)
@@ -614,11 +721,18 @@ class SimpleEmailDialog(QDialog):
             QMessageBox.warning(self, "수신자 오류", "테스트할 수신자를 추가하세요.")
             return
 
+        # 카테고리 필터 확인
+        selected_categories = self.get_selected_categories()
+        if selected_categories is not None and len(selected_categories) == 0:
+            QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
+            return
+
         temp_schedule = {
             "custom_title": self.subject_edit.text().strip() or "테스트",
             "recipients": recipients,
             "content_types": ["all"],
-            "period": "오늘"
+            "period": "오늘",
+            "selected_categories": selected_categories
         }
 
         if self.send_email(temp_schedule, is_test=True):

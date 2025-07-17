@@ -16,7 +16,7 @@ except ImportError:
 
 
 class EmailSender:
-    """Outlook을 통한 메일 발송 클래스 (간단 버전)"""
+    """Outlook을 통한 메일 발송 클래스 (카테고리 필터 지원)"""
 
     def __init__(self, storage_manager):
         self.storage_manager = storage_manager
@@ -33,7 +33,7 @@ class EmailSender:
             return False, f"Outlook 연결에 실패했습니다:\n{str(e)}\n\nOutlook이 설치되어 있고 로그인되어 있는지 확인하세요."
 
     def send_scheduled_email(self, settings, is_test=False):
-        """설정에 따른 메일 발송"""
+        """설정에 따른 메일 발송 (카테고리 필터 지원)"""
         available, error_msg = self.check_availability()
         if not available:
             print(f"메일 발송 불가: {error_msg}")
@@ -60,7 +60,7 @@ class EmailSender:
             if recipients:
                 mail.To = "; ".join(recipients)
 
-            # 간단한 HTML 내용 생성
+            # HTML 내용 생성 (카테고리 필터 적용)
             html_body = self.create_simple_html(settings, is_test)
             mail.HTMLBody = html_body
 
@@ -75,12 +75,22 @@ class EmailSender:
             return False
 
     def create_simple_html(self, settings, is_test=False):
-        """간단한 HTML 메일 내용 생성"""
-        # 작업 데이터 수집
+        """간단한 HTML 메일 내용 생성 (카테고리 필터 지원)"""
+        # 작업 데이터 수집 (카테고리 필터 적용)
         tasks_data = self.collect_tasks_data(settings)
 
         # 현재 시간
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
+
+        # 카테고리 필터 정보
+        selected_categories = settings.get("selected_categories")
+        category_filter_info = ""
+        if selected_categories is not None:
+            category_filter_info = f'''
+            <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
+                <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
+            </div>
+            '''
 
         # 테스트 메시지
         test_message = ""
@@ -154,6 +164,7 @@ class EmailSender:
                 </div>
                 <div class="content">
                     {test_message}
+                    {category_filter_info}
                     {summary}
                     {task_lists}
                 </div>
@@ -183,11 +194,14 @@ class EmailSender:
             style = "text-decoration: line-through; color: #666;" if task.completed else ""
             importance = "⭐" if task.important else ""
 
+            # 카테고리 색상 가져오기
+            category_color = self.get_category_color(task.category)
+
             task_items += f"""
             <div style="background: #f8f9fa; margin: 5px 0; padding: 10px; border-radius: 5px; border-left: 3px solid {'#4caf50' if task.completed else '#2196f3'};">
                 <div style="{style}">
                     {status} {importance} <strong>{self.escape_html(task.title)}</strong>
-                    <span style="background: #e0e0e0; color: #666; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">{task.category}</span>
+                    <span style="background: {category_color}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">{task.category}</span>
                 </div>
                 {f'<div style="font-size: 12px; color: #666; margin-top: 5px;">{self.escape_html(task.content[:50])}</div>' if task.content else ''}
             </div>
@@ -200,14 +214,27 @@ class EmailSender:
         </div>
         """
 
+    def get_category_color(self, category_name):
+        """카테고리 색상 반환"""
+        for category in self.storage_manager.categories:
+            if category.name == category_name:
+                return category.color
+        return "#6c757d"  # 기본 색상
+
     def collect_tasks_data(self, settings):
-        """설정에 따른 작업 데이터 수집"""
+        """설정에 따른 작업 데이터 수집 (카테고리 필터 지원)"""
         period = settings.get("period", "오늘")
 
         # 오늘 작업만 간단하게 가져오기
         today = datetime.now().strftime("%Y-%m-%d")
         daily_tasks = self.storage_manager.get_tasks_by_date(today)
         all_tasks = [t for t in daily_tasks if t.created_date == today]
+
+        # 카테고리 필터 적용
+        selected_categories = settings.get("selected_categories")
+        if selected_categories is not None:  # 특정 카테고리만 선택된 경우
+            all_tasks = [t for t in all_tasks if t.category in selected_categories]
+            print(f"카테고리 필터 적용: {selected_categories} -> {len(all_tasks)}개 작업")
 
         # 통계 계산
         total = len(all_tasks)

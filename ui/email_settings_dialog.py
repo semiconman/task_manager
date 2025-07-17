@@ -461,13 +461,60 @@ class EmailSettingsDialog(QDialog):
         weekday_layout.addLayout(weekday_preset_layout)
         right_layout.addWidget(weekday_group)
 
-        # 포함 내용 + 수신자 (2열 배치)
-        content_recipient_layout = QHBoxLayout()
+        # 카테고리 필터 + 포함 내용 (2열 배치)
+        category_content_layout = QHBoxLayout()
+
+        # 카테고리 필터 (새로 추가)
+        category_group = QGroupBox("카테고리 필터")
+        category_layout = QVBoxLayout(category_group)
+        category_group.setMaximumHeight(120)
+
+        # 안내 메시지
+        category_info = QLabel("특정 카테고리만 포함")
+        category_info.setStyleSheet("color: #666; font-size: 10px; margin-bottom: 5px;")
+        category_layout.addWidget(category_info)
+
+        # 전체 선택 체크박스
+        self.routine_all_categories_check = QCheckBox("모든 카테고리")
+        self.routine_all_categories_check.setChecked(True)
+        self.routine_all_categories_check.stateChanged.connect(self.on_routine_all_categories_changed)
+        category_layout.addWidget(self.routine_all_categories_check)
+
+        # 개별 카테고리 체크박스 (2열로 배치)
+        self.routine_category_checks = {}
+        category_grid_layout = QVBoxLayout()
+
+        row1_layout = QHBoxLayout()
+        row2_layout = QHBoxLayout()
+
+        for i, category in enumerate(self.storage_manager.categories):
+            check = QCheckBox(category.name)
+            check.setChecked(True)
+            check.stateChanged.connect(self.on_routine_category_check_changed)
+            check.setStyleSheet(f"color: {category.color}; font-weight: bold; font-size: 10px;")
+
+            self.routine_category_checks[category.name] = check
+
+            # 2열로 배치
+            if i < 2:
+                row1_layout.addWidget(check)
+            else:
+                row2_layout.addWidget(check)
+
+        # 남은 공간 채우기
+        row1_layout.addStretch()
+        row2_layout.addStretch()
+
+        category_grid_layout.addLayout(row1_layout)
+        category_grid_layout.addLayout(row2_layout)
+        category_layout.addLayout(category_grid_layout)
+
+        category_content_layout.addWidget(category_group)
 
         # 포함 내용
         content_group = QGroupBox("포함 내용")
         content_layout = QVBoxLayout(content_group)
-        content_group.setMaximumHeight(80)
+        content_group.setMaximumHeight(120)
 
         content_check_layout = QHBoxLayout()
         self.routine_all_check = QCheckBox("전체")
@@ -480,7 +527,11 @@ class EmailSettingsDialog(QDialog):
         content_check_layout.addWidget(self.routine_incomplete_check)
         content_layout.addLayout(content_check_layout)
 
-        content_recipient_layout.addWidget(content_group)
+        category_content_layout.addWidget(content_group)
+        right_layout.addLayout(category_content_layout)
+
+        # 수신자 + 메모 (2열 배치)
+        recipient_memo_layout = QHBoxLayout()
 
         # 수신자 선택
         recipient_group = QGroupBox("수신자")
@@ -508,8 +559,7 @@ class EmailSettingsDialog(QDialog):
         self.selected_recipients_label.setStyleSheet("color: #666; font-size: 11px; margin-top: 5px;")
         recipient_layout.addWidget(self.selected_recipients_label)
 
-        content_recipient_layout.addWidget(recipient_group)
-        right_layout.addLayout(content_recipient_layout)
+        recipient_memo_layout.addWidget(recipient_group)
 
         # 추가 메모 (작게)
         memo_group = QGroupBox("추가 메모 (선택사항)")
@@ -521,7 +571,8 @@ class EmailSettingsDialog(QDialog):
         self.routine_memo_edit.setMaximumHeight(60)
         memo_layout.addWidget(self.routine_memo_edit)
 
-        right_layout.addWidget(memo_group)
+        recipient_memo_layout.addWidget(memo_group)
+        right_layout.addLayout(recipient_memo_layout)
 
         # 루틴 추가/수정 버튼
         routine_action_layout = QHBoxLayout()
@@ -595,38 +646,8 @@ class EmailSettingsDialog(QDialog):
 
         # 중복 확인
         for i in range(self.recipients_list.count()):
-            if self.recipients_list.item(i).text() == email:
-                QMessageBox.warning(self, "중복 오류", "이미 추가된 이메일 주소입니다.")
-                return
-
-        # 주소록에 추가
-        item = QListWidgetItem(email)
-        item.setToolTip(f"주소: {email}")
-        self.recipients_list.addItem(item)
-        self.recipient_edit.clear()
-        self.recipient_edit.setFocus()
-
-    def remove_recipient(self):
-        """선택한 주소 삭제"""
-        current_item = self.recipients_list.currentItem()
-        if current_item:
-            reply = QMessageBox.question(
-                self, "주소 삭제",
-                f"'{current_item.text()}'를 삭제하시겠습니까?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
-            )
-
-            if reply == QMessageBox.StandardButton.Yes:
-                row = self.recipients_list.row(current_item)
-                self.recipients_list.takeItem(row)
-        else:
-            QMessageBox.information(self, "선택 없음", "삭제할 주소를 선택하세요.")
-
-    def clear_all_recipients(self):
-        """모든 주소 삭제"""
-        if self.recipients_list.count() == 0:
-            QMessageBox.information(self, "목록 없음", "삭제할 주소가 없습니다.")
+            if self.recipients_list.count() == 0:
+                QMessageBox.information(self, "목록 없음", "삭제할 주소가 없습니다.")
             return
 
         reply = QMessageBox.question(
@@ -687,6 +708,41 @@ class EmailSettingsDialog(QDialog):
             QMessageBox.critical(self, "오류", f"테스트 메일 발송 중 오류가 발생했습니다:\n{e}")
 
     # === 데일리 루틴 관리 메서드 ===
+    def on_routine_all_categories_changed(self, state):
+        """루틴 - 모든 카테고리 체크박스 상태 변경"""
+        checked = state == Qt.CheckState.Checked
+        for check in self.routine_category_checks.values():
+            check.setChecked(checked)
+
+    def on_routine_category_check_changed(self):
+        """루틴 - 개별 카테고리 체크박스 상태 변경"""
+        # 모든 카테고리가 선택되었는지 확인
+        all_checked = all(check.isChecked() for check in self.routine_category_checks.values())
+        any_checked = any(check.isChecked() for check in self.routine_category_checks.values())
+
+        # 전체 선택 체크박스 상태 업데이트
+        self.routine_all_categories_check.blockSignals(True)
+        if all_checked:
+            self.routine_all_categories_check.setChecked(True)
+        elif not any_checked:
+            self.routine_all_categories_check.setChecked(False)
+        else:
+            self.routine_all_categories_check.setTristate(True)
+            self.routine_all_categories_check.setCheckState(Qt.CheckState.PartiallyChecked)
+        self.routine_all_categories_check.blockSignals(False)
+
+    def get_routine_selected_categories(self):
+        """루틴 - 선택된 카테고리 목록 반환"""
+        if self.routine_all_categories_check.isChecked():
+            return None  # 모든 카테고리
+
+        selected_categories = []
+        for category_name, check in self.routine_category_checks.items():
+            if check.isChecked():
+                selected_categories.append(category_name)
+
+        return selected_categories if selected_categories else None
+
     def select_recipients_from_address_book(self):
         """주소록에서 수신자 선택"""
         # 현재 주소록 가져오기
@@ -884,6 +940,12 @@ class EmailSettingsDialog(QDialog):
             QMessageBox.warning(self, "입력 오류", "주소록에서 수신자를 최소 1명 선택하세요.")
             return False
 
+        # 카테고리 선택 확인
+        selected_categories = self.get_routine_selected_categories()
+        if selected_categories is not None and len(selected_categories) == 0:
+            QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
+            return False
+
         return True
 
     def collect_routine_data(self):
@@ -902,7 +964,8 @@ class EmailSettingsDialog(QDialog):
             "weekdays": selected_weekdays,
             "content_types": content_types,
             "recipients": self.selected_routine_recipients.copy(),
-            "memo": self.routine_memo_edit.toPlainText().strip()
+            "memo": self.routine_memo_edit.toPlainText().strip(),
+            "selected_categories": self.get_routine_selected_categories()  # 카테고리 필터 추가
         }
 
     def load_routine_to_form(self, routine):
@@ -930,6 +993,19 @@ class EmailSettingsDialog(QDialog):
         self.selected_routine_recipients = routine.get("recipients", []).copy()
         self.update_selected_recipients_display()
 
+        # 카테고리 설정
+        selected_categories = routine.get("selected_categories")
+        if selected_categories is None:
+            # 모든 카테고리 선택
+            self.routine_all_categories_check.setChecked(True)
+            for check in self.routine_category_checks.values():
+                check.setChecked(True)
+        else:
+            # 특정 카테고리만 선택
+            self.routine_all_categories_check.setChecked(False)
+            for category_name, check in self.routine_category_checks.items():
+                check.setChecked(category_name in selected_categories)
+
         # 메모 설정
         self.routine_memo_edit.setPlainText(routine.get("memo", ""))
 
@@ -948,6 +1024,12 @@ class EmailSettingsDialog(QDialog):
 
         self.selected_routine_recipients = []
         self.update_selected_recipients_display()
+
+        # 카테고리 선택 초기화
+        self.routine_all_categories_check.setChecked(True)
+        for check in self.routine_category_checks.values():
+            check.setChecked(True)
+
         self.routine_memo_edit.clear()
 
     def refresh_routine_list(self):
@@ -970,7 +1052,16 @@ class EmailSettingsDialog(QDialog):
             # 수신자 수
             recipient_count = len(routine.get("recipients", []))
 
-            display_text = f"{enabled} {name}\n{weekday_str} {time} | {recipient_count}명"
+            # 카테고리 정보
+            category_info = ""
+            selected_categories = routine.get("selected_categories")
+            if selected_categories is not None:
+                if len(selected_categories) <= 2:
+                    category_info = f" [{', '.join(selected_categories)}]"
+                else:
+                    category_info = f" [{', '.join(selected_categories[:2])} 외 {len(selected_categories) - 2}개]"
+
+            display_text = f"{enabled} {name}\n{weekday_str} {time} | {recipient_count}명{category_info}"
 
             item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, routine)
@@ -1081,3 +1172,48 @@ class EmailSettingsDialog(QDialog):
     def accept(self):
         """대화상자 확인"""
         super().accept()
+        if self.recipients_list.item(i).text() == email:
+            QMessageBox.warning(self, "중복 오류", "이미 추가된 이메일 주소입니다.")
+            return
+
+        # 주소록에 추가
+        item = QListWidgetItem(email)
+        item.setToolTip(f"주소: {email}")
+        self.recipients_list.addItem(item)
+        self.recipient_edit.clear()
+        self.recipient_edit.setFocus()
+
+
+    def remove_recipient(self):
+        """선택한 주소 삭제"""
+        current_item = self.recipients_list.currentItem()
+        if current_item:
+            reply = QMessageBox.question(
+                self, "주소 삭제",
+                f"'{current_item.text()}'를 삭제하시겠습니까?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                row = self.recipients_list.row(current_item)
+                self.recipients_list.takeItem(row)
+        else:
+            QMessageBox.information(self, "선택 없음", "삭제할 주소를 선택하세요.")
+
+
+    def clear_all_recipients(self):
+        """모든 주소 삭제"""
+        if self.recipients_list.count() == 0:
+            QMessageBox.information(self, "목록 없음", "삭제할 주소가 없습니다.")
+            return
+
+        reply = QMessageBox.question(
+            self, "전체 삭제",
+            f"모든 주소({self.recipients_list.count()}개)를 삭제하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            self.recipients_list.clear()
