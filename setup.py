@@ -2,9 +2,9 @@ import sys
 from cx_Freeze import setup, Executable
 
 # 프로그램 정보 설정
-APP_NAME = "Todolist_PM_Ver1.5"
-VERSION = "1.5"
-DESCRIPTION = "Todolist PM - 작업 관리 및 메일 발송 시스템"
+APP_NAME = "Todolist_PM_Ver1.6"
+VERSION = "1.6"
+DESCRIPTION = "Todolist PM - 일정 관리"
 AUTHOR = "YoungJun_Ahn"
 
 # 콘솔창 숨김 설정 (Windows)
