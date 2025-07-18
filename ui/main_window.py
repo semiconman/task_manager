@@ -207,6 +207,14 @@ class MainWindow(QMainWindow):
         simple_email_action.triggered.connect(self.on_simple_email)
         options_menu.addAction(simple_email_action)
 
+        # 도움말 메뉴
+        help_menu = menubar.addMenu("도움말")
+
+        # 사용법 및 개발자 연락처
+        help_action = QAction("사용법 및 지원", self)
+        help_action.triggered.connect(self.on_show_help)
+        help_menu.addAction(help_action)
+
     def on_date_selected(self, date):
         """날짜 선택 이벤트 처리
 
@@ -388,6 +396,16 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"메일 관리 중 오류: {e}")
             QMessageBox.critical(self, "오류", f"메일 관리 중 오류가 발생했습니다:\n{e}")
+
+    def on_show_help(self):
+        """도움말 다이얼로그 표시"""
+        try:
+            from ui.help_dialog import HelpDialog
+            dialog = HelpDialog(self)
+            dialog.exec()
+        except Exception as e:
+            print(f"도움말 표시 중 오류: {e}")
+            QMessageBox.critical(self, "오류", f"도움말 표시 중 오류가 발생했습니다:\n{e}")
 
     def on_email_schedule(self):
         """메일 예약 관리 대화상자 표시"""

@@ -445,7 +445,7 @@ class TaskItemWidget(QFrame):
             QMessageBox.critical(self, "오류", f"메일 발송 중 오류가 발생했습니다:\n{e}")
 
     def send_task_email(self, recipients):
-        """개별 작업 메일 발송"""
+        """개별 작업 메일 발송 (테이블 기반, Outlook 호환성 개선)"""
         try:
             import win32com.client as win32
             from datetime import datetime
@@ -461,7 +461,7 @@ class TaskItemWidget(QFrame):
             # 수신자 설정
             mail.To = "; ".join(recipients)
 
-            # 메일 내용 생성
+            # 메일 내용 생성 (테이블 기반)
             current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
 
             html_body = f"""
@@ -469,57 +469,126 @@ class TaskItemWidget(QFrame):
             <html>
             <head>
                 <meta charset="utf-8">
-                <style>
-                    body {{ font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }}
-                    .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
-                    .header {{ background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 20px; text-align: center; }}
-                    .content {{ padding: 20px; }}
-                    .status {{ 
-                        display: inline-block; 
-                        padding: 5px 15px; 
-                        border-radius: 20px; 
-                        font-weight: bold; 
-                        background: {'#4CAF50' if self.task.completed else '#FF9800'}; 
-                        color: white; 
-                        margin-bottom: 15px; 
-                    }}
-                    .task-content {{ 
-                        background: #f8f9fa; 
-                        padding: 15px; 
-                        border-radius: 5px; 
-                        border-left: 4px solid {'#4CAF50' if self.task.completed else '#FF9800'}; 
-                    }}
-                    .footer {{ background: #f8f9fa; padding: 15px; text-align: center; color: #666; font-size: 12px; }}
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>일정 공유</title>
+                <!--[if mso]>
+                <style type="text/css">
+                    table {{ border-collapse: collapse; }}
+                    .header-table {{ background-color: #4facfe !important; }}
                 </style>
+                <![endif]-->
             </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1 style="margin: 0;">📋 일정 공유</h1>
-                        <div>{current_time}</div>
-                    </div>
-                    <div class="content">
-                        <div class="status">{status}</div>
+            <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
 
-                        <h2 style="color: #333; margin-bottom: 15px;">{self.escape_html(self.task.title)}</h2>
+                <!-- 메인 컨테이너 -->
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px;">
+                    <tr>
+                        <td align="center">
 
-                        <div style="margin-bottom: 15px;">
-                            <strong>카테고리:</strong> 
-                            <span style="background: {self.get_category_color()}; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px;">
-                                {self.task.category}
-                            </span>
-                        </div>
+                            <!-- 메일 내용 테이블 -->
+                            <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden;">
 
-                        <div style="margin-bottom: 15px;">
-                            <strong>생성일:</strong> {self.task.created_date}
-                        </div>
+                                <!-- 헤더 -->
+                                <tr>
+                                    <td class="header-table" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 25px 20px; text-align: center;">
+                                        <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 24px; font-weight: bold;">
+                                            📋 일정 공유
+                                        </h1>
+                                        <div style="color: #ffffff; font-size: 16px; margin: 0;">
+                                            {current_time}
+                                        </div>
+                                    </td>
+                                </tr>
 
-                        {f'<div class="task-content"><strong>일정 내용:</strong><br>{self.escape_html(self.task.content).replace(chr(10), "<br>")}</div>' if self.task.content else '<div style="color: #666; font-style: italic;">내용이 없습니다.</div>'}
-                    </div>
-                    <div class="footer">
-                        🤖 Todolist PM에서 자동 생성 | {current_time}
-                    </div>
-                </div>
+                                <!-- 메인 컨텐츠 -->
+                                <tr>
+                                    <td style="padding: 25px 20px;">
+
+                                        <!-- 상태 표시 -->
+                                        <table width="100%" cellpadding="10" cellspacing="0" style="margin-bottom: 20px;">
+                                            <tr>
+                                                <td style="text-align: center;">
+                                                    <span style="display: inline-block; padding: 8px 20px; border-radius: 20px; font-weight: bold; background: {'#4CAF50' if self.task.completed else '#FF9800'}; color: white; font-size: 14px;">
+                                                        {status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <!-- 작업 제목 -->
+                                        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+                                            <tr>
+                                                <td>
+                                                    <h2 style="color: #333; margin: 0; font-size: 20px; text-align: center;">
+                                                        {self.escape_html(self.task.title)}
+                                                    </h2>
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <!-- 작업 정보 -->
+                                        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+                                            <tr>
+                                                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
+                                                    <table width="100%" cellpadding="0" cellspacing="0">
+                                                        <tr>
+                                                            <td style="font-weight: bold; color: #333; width: 80px;">카테고리:</td>
+                                                            <td>
+                                                                <span style="background: {self.get_category_color()}; color: white; padding: 4px 12px; border-radius: 15px; font-size: 12px; font-weight: bold;">
+                                                                    {self.task.category}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
+                                                    <table width="100%" cellpadding="0" cellspacing="0">
+                                                        <tr>
+                                                            <td style="font-weight: bold; color: #333; width: 80px;">생성일:</td>
+                                                            <td style="color: #666;">{self.task.created_date}</td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                            {f'''<tr>
+                                                <td style="padding: 10px 0;">
+                                                    <table width="100%" cellpadding="0" cellspacing="0">
+                                                        <tr>
+                                                            <td style="font-weight: bold; color: #333; width: 80px; vertical-align: top;">내용:</td>
+                                                            <td style="color: #666; line-height: 1.6;">{self.escape_html(self.task.content).replace(chr(10), "<br>")}</td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>''' if self.task.content else '''<tr>
+                                                <td style="padding: 10px 0;">
+                                                    <table width="100%" cellpadding="0" cellspacing="0">
+                                                        <tr>
+                                                            <td style="font-weight: bold; color: #333; width: 80px;">내용:</td>
+                                                            <td style="color: #999; font-style: italic;">내용이 없습니다.</td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>'''}
+                                        </table>
+
+                                    </td>
+                                </tr>
+
+                                <!-- 푸터 -->
+                                <tr>
+                                    <td style="background-color: #f8f9fa; padding: 15px 20px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #e9ecef;">
+                                        🤖 Todolist PM에서 자동 생성 | {current_time}
+                                    </td>
+                                </tr>
+
+                            </table>
+
+                        </td>
+                    </tr>
+                </table>
+
             </body>
             </html>
             """

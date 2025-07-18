@@ -60,7 +60,7 @@ class EmailSender:
             if recipients:
                 mail.To = "; ".join(recipients)
 
-            # HTML 내용 생성 (카테고리 필터 적용)
+            # HTML 내용 생성 (카테고리 필터 적용, 테이블 기반으로 수정)
             html_body = self.create_simple_html(settings, is_test)
             mail.HTMLBody = html_body
 
@@ -75,154 +75,228 @@ class EmailSender:
             return False
 
     def create_simple_html(self, settings, is_test=False):
-        """간단한 HTML 메일 내용 생성 (카테고리 필터 지원)"""
+        """간단한 HTML 메일 내용 생성 (테이블 기반, Outlook 호환성 개선)"""
         # 작업 데이터 수집 (카테고리 필터 적용)
         tasks_data = self.collect_tasks_data(settings)
 
         # 현재 시간
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
 
-        # 카테고리 필터 정보 - 수정된 로직
+        # 카테고리 필터 정보
         selected_categories = settings.get("selected_categories")
         category_filter_info = ""
 
-        print(f"EmailSender - 카테고리 필터: {selected_categories}")  # 디버그
+        print(f"EmailSender - 카테고리 필터: {selected_categories}")
 
         if selected_categories is not None and len(selected_categories) > 0:
-            # 특정 카테고리가 선택된 경우
             category_filter_info = f'''
-            <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
-                <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
-            </div>
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center;">
+                    <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
+                </td></tr>
+            </table>
             '''
         else:
-            # 모든 카테고리가 선택된 경우 (None이거나 빈 리스트)
             category_filter_info = f'''
-            <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #28a745;">
-                <strong>📂 포함된 카테고리:</strong> 모든 카테고리
-            </div>
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center;">
+                    <strong>📂 포함된 카테고리:</strong> 모든 카테고리
+                </td></tr>
+            </table>
             '''
 
-        # 테스트 메시지
+        # 테스트 메시지 (테이블 기반)
         test_message = ""
         if is_test:
-            test_message = '<div style="background: #fff3cd; padding: 10px; margin-bottom: 20px; border-radius: 5px;"><strong>🧪 테스트 메일입니다</strong></div>'
+            test_message = '''
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center; font-weight: bold;">🧪 테스트 메일입니다</td></tr>
+            </table>
+            '''
 
-        # 통계
+        # 통계 (테이블 기반)
         stats = tasks_data["stats"]
 
-        # 간단한 요약
-        summary = f"""
-        <div style="background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-            <h2 style="color: #1976d2; margin-top: 0;">📊 오늘의 요약</h2>
-            <div style="display: flex; gap: 20px; justify-content: space-around; margin: 15px 0;">
-                <div style="text-align: center;">
-                    <div style="font-size: 24px; font-weight: bold; color: #2196f3;">{stats['total']}</div>
-                    <div style="font-size: 12px; color: #666;">전체 작업</div>
-                </div>
-                <div style="text-align: center;">
-                    <div style="font-size: 24px; font-weight: bold; color: #4caf50;">{stats['completed']}</div>
-                    <div style="font-size: 12px; color: #666;">완료됨</div>
-                </div>
-                <div style="text-align: center;">
-                    <div style="font-size: 24px; font-weight: bold; color: #f44336;">{stats['incomplete']}</div>
-                    <div style="font-size: 12px; color: #666;">미완료</div>
-                </div>
-            </div>
-            <div style="background: #fff; padding: 10px; border-radius: 5px; margin-top: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>완료율</span>
-                    <span style="font-weight: bold; color: #4caf50;">{stats['completion_rate']:.0f}%</span>
-                </div>
-                <div style="background: #e0e0e0; height: 8px; border-radius: 4px; margin-top: 5px;">
-                    <div style="background: #4caf50; height: 8px; border-radius: 4px; width: {stats['completion_rate']:.0f}%;"></div>
-                </div>
-            </div>
-        </div>
-        """
-
-        # 작업 목록 (간단하게)
-        task_lists = ""
+        # 작업 목록 섹션들 (테이블 기반)
+        task_sections = ""
         content_types = settings.get("content_types", ["all"])
         tasks = tasks_data["tasks"]
 
         if "all" in content_types and tasks["all"]:
-            task_lists += self.create_task_section("📌 전체 작업", tasks["all"][:5])
+            task_sections += self.create_outlook_task_section("📌 전체 작업", tasks["all"][:5])
         if "completed" in content_types and tasks["completed"]:
-            task_lists += self.create_task_section("✅ 완료된 작업", tasks["completed"][:5])
+            task_sections += self.create_outlook_task_section("✅ 완료된 작업", tasks["completed"][:5])
         if "incomplete" in content_types and tasks["incomplete"]:
-            task_lists += self.create_task_section("⏳ 미완료 작업", tasks["incomplete"][:5])
+            task_sections += self.create_outlook_task_section("⏳ 미완료 작업", tasks["incomplete"][:5])
 
-        # 전체 HTML
+        # Outlook 호환 HTML (테이블 기반 레이아웃)
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
-            <style>
-                body {{ font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; padding: 20px; }}
-                .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
-                .header {{ background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 20px; text-align: center; }}
-                .content {{ padding: 20px; }}
-                .footer {{ background: #f8f9fa; padding: 15px; text-align: center; color: #666; font-size: 12px; }}
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Todolist 리포트</title>
+            <!--[if mso]>
+            <style type="text/css">
+                table {{ border-collapse: collapse; }}
+                .header-table {{ background-color: #4facfe !important; }}
             </style>
+            <![endif]-->
         </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1 style="margin: 0;"> Todolist 리포트</h1>
-                    <div>{current_time}</div>
-                </div>
-                <div class="content">
-                    {test_message}
-                    {category_filter_info}
-                    {summary}
-                    {task_lists}
-                </div>
-                <div class="footer">
-                    🤖 Todolist PM에서 자동 생성 | {current_time}
-                </div>
-            </div>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+
+            <!-- 메인 컨테이너 -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px;">
+                <tr>
+                    <td align="center">
+
+                        <!-- 메일 내용 테이블 -->
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden;">
+
+                            <!-- 헤더 -->
+                            <tr>
+                                <td class="header-table" style="background-color: #4facfe; padding: 25px 20px; text-align: center;">
+                                    <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 24px; font-weight: bold;">
+                                        📋 Todolist 리포트
+                                    </h1>
+                                    <div style="color: #ffffff; font-size: 16px; margin: 0;">
+                                        {current_time}
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- 메인 컨텐츠 -->
+                            <tr>
+                                <td style="padding: 25px 20px;">
+
+                                    {test_message}
+                                    {category_filter_info}
+
+                                    <!-- 오늘의 요약 -->
+                                    <table width="100%" cellpadding="20" cellspacing="0" style="background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); border-radius: 10px; margin-bottom: 20px;">
+                                        <tr>
+                                            <td>
+                                                <h2 style="color: #1976d2; margin-top: 0; margin-bottom: 15px; text-align: center;">📊 오늘의 요약</h2>
+
+                                                <!-- 통계 테이블 -->
+                                                <table width="100%" cellpadding="10" cellspacing="0">
+                                                    <tr>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #2196f3;">{stats['total']}</div>
+                                                            <div style="font-size: 12px; color: #666;">전체 작업</div>
+                                                        </td>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #4caf50;">{stats['completed']}</div>
+                                                            <div style="font-size: 12px; color: #666;">완료됨</div>
+                                                        </td>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #f44336;">{stats['incomplete']}</div>
+                                                            <div style="font-size: 12px; color: #666;">미완료</div>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+
+                                                <!-- 완료율 -->
+                                                <table width="100%" cellpadding="10" cellspacing="0" style="background: #fff; border-radius: 5px; margin-top: 15px;">
+                                                    <tr>
+                                                        <td>
+                                                            <table width="100%" cellpadding="0" cellspacing="0">
+                                                                <tr>
+                                                                    <td style="font-weight: bold;">완료율</td>
+                                                                    <td style="text-align: right; font-weight: bold; color: #4caf50;">
+                                                                        {stats['completion_rate']:.0f}%
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 5px;">
+                                                                <tr>
+                                                                    <td style="background: #e0e0e0; height: 8px; border-radius: 4px;">
+                                                                        <div style="background: #4caf50; height: 8px; border-radius: 4px; width: {stats['completion_rate']:.0f}%;"></div>
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                    {task_sections}
+
+                                </td>
+                            </tr>
+
+                            <!-- 푸터 -->
+                            <tr>
+                                <td style="background-color: #f8f9fa; padding: 15px 20px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #e9ecef;">
+                                    🤖 Todolist PM에서 자동 생성 | {current_time}
+                                </td>
+                            </tr>
+
+                        </table>
+
+                    </td>
+                </tr>
+            </table>
+
         </body>
         </html>
         """
 
         return html
 
-    def create_task_section(self, title, tasks):
-        """작업 섹션 생성"""
+    def create_outlook_task_section(self, title, tasks):
+        """Outlook 호환 작업 섹션 생성 (테이블 기반)"""
         if not tasks:
             return f"""
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #333; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;">{title}</h3>
-                <div style="text-align: center; color: #666; padding: 20px;">작업이 없습니다</div>
-            </div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
+                        <h3 style="margin: 0; color: #333;">{title}</h3>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center; color: #666; padding: 20px;">작업이 없습니다</td>
+                </tr>
+            </table>
             """
 
-        task_items = ""
+        task_rows = ""
         for task in tasks:
             status = "✅" if task.completed else "⏳"
-            style = "text-decoration: line-through; color: #666;" if task.completed else ""
+            text_style = "text-decoration: line-through; color: #666;" if task.completed else ""
             importance = "⭐" if task.important else ""
+            border_color = "#4caf50" if task.completed else "#2196f3"
 
-            # 카테고리 색상 가져오기
-            category_color = self.get_category_color(task.category)
-
-            task_items += f"""
-            <div style="background: #f8f9fa; margin: 5px 0; padding: 10px; border-radius: 5px; border-left: 3px solid {'#4caf50' if task.completed else '#2196f3'};">
-                <div style="{style}">
-                    {status} {importance} <strong>{self.escape_html(task.title)}</strong>
-                    <span style="background: {category_color}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">{task.category}</span>
-                </div>
-                {f'<div style="font-size: 12px; color: #666; margin-top: 5px;">{self.escape_html(task.content[:50])}</div>' if task.content else ''}
-            </div>
+            task_rows += f"""
+            <tr>
+                <td style="padding: 10px; background-color: #f8f9fa; border-left: 3px solid {border_color}; border-radius: 5px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="{text_style}">
+                                {status} {importance} <strong>{self.escape_html(task.title)}</strong>
+                                <span style="background: {self.get_category_color(task.category)}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">{task.category}</span>
+                            </td>
+                        </tr>
+                        {f'<tr><td style="font-size: 12px; color: #666; margin-top: 5px;">{self.escape_html(task.content[:50])}</td></tr>' if task.content else ''}
+                    </table>
+                </td>
+            </tr>
+            <tr><td style="height: 5px;"></td></tr>
             """
 
         return f"""
-        <div style="margin-bottom: 20px;">
-            <h3 style="color: #333; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;">{title}</h3>
-            {task_items}
-        </div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
+                    <h3 style="margin: 0; color: #333;">{title}</h3>
+                </td>
+            </tr>
+            <tr><td style="height: 10px;"></td></tr>
+            {task_rows}
+        </table>
         """
 
     def get_category_color(self, category_name):
