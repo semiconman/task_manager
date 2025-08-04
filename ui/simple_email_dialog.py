@@ -3,230 +3,225 @@
 
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QCheckBox, QGroupBox, QComboBox, QTimeEdit,
-    QListWidget, QListWidgetItem, QMessageBox, QFrame,
-    QButtonGroup, QRadioButton, QDateEdit, QScrollArea, QWidget
+    QPushButton, QCheckBox, QGroupBox, QDateEdit, QTextEdit,
+    QListWidget, QListWidgetItem, QMessageBox, QDialogButtonBox, QFrame,
+    QScrollArea, QWidget
 )
-from PyQt6.QtCore import Qt, QTime, QDate, QTimer
+from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont
 
 
-class SimpleEmailDialog(QDialog):
-    """간단한 메일 관리 대화상자 - 모든 기능을 하나로 통합"""
+class AddressBookSelectionDialog(QDialog):
+    """주소록 선택 대화상자 (데일리 리포트용)"""
 
-    def __init__(self, storage_manager):
+    def __init__(self, address_book, selected_emails=None):
         super().__init__()
+        self.address_book = address_book
+        self.selected_emails = selected_emails or []
 
-        self.storage_manager = storage_manager
-        self.email_schedules = self.load_email_schedules()
-
-        # 자동 발송 타이머 (1분마다)
-        self.auto_timer = QTimer()
-        self.auto_timer.timeout.connect(self.check_auto_send)
-        self.auto_timer.start(60000)
-
-        self.setWindowTitle("📧 메일 관리")
-        self.setMinimumSize(950, 750)  # 크기 증가 (카테고리 선택 영역 추가로)
+        self.setWindowTitle("주소록에서 선택")
+        self.setMinimumSize(450, 350)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.init_ui()
-        self.load_schedule_list()
 
     def init_ui(self):
-        """UI 초기화 - 왼쪽 목록, 오른쪽 설정"""
-        layout = QHBoxLayout(self)
+        """UI 초기화"""
+        layout = QVBoxLayout(self)
 
-        # === 왼쪽: 예약 목록 ===
-        left_frame = QFrame()
-        left_frame.setFrameStyle(QFrame.Shape.StyledPanel)
-        left_layout = QVBoxLayout(left_frame)
+        # 안내 메시지
+        info_label = QLabel("주소록에서 수신자를 선택하세요:")
+        info_label.setStyleSheet("font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(info_label)
+
+        # 주소록 목록
+        self.address_list = QListWidget()
+        self.address_list.setMinimumHeight(250)
+        layout.addWidget(self.address_list)
+
+        # 주소록 로드
+        self.load_address_book()
+
+        # 전체 선택/해제 버튼
+        button_layout = QHBoxLayout()
+
+        select_all_btn = QPushButton("전체 선택")
+        select_all_btn.clicked.connect(self.select_all)
+        select_all_btn.setStyleSheet("background: #28a745; color: white; padding: 6px 12px; border-radius: 3px;")
+
+        select_none_btn = QPushButton("전체 해제")
+        select_none_btn.clicked.connect(self.select_none)
+        select_none_btn.setStyleSheet("background: #6c757d; color: white; padding: 6px 12px; border-radius: 3px;")
+
+        button_layout.addWidget(select_all_btn)
+        button_layout.addWidget(select_none_btn)
+        button_layout.addStretch()
+
+        layout.addLayout(button_layout)
+
+        # 확인/취소 버튼
+        dialog_buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        dialog_buttons.button(QDialogButtonBox.StandardButton.Ok).setText("선택 완료")
+        dialog_buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("취소")
+        dialog_buttons.accepted.connect(self.accept)
+        dialog_buttons.rejected.connect(self.reject)
+        layout.addWidget(dialog_buttons)
+
+    def load_address_book(self):
+        """주소록 로드"""
+        for email in self.address_book:
+            item = QListWidgetItem(email)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+
+            # 기존 선택된 이메일이면 체크
+            if email in self.selected_emails:
+                item.setCheckState(Qt.CheckState.Checked)
+            else:
+                item.setCheckState(Qt.CheckState.Unchecked)
+
+            self.address_list.addItem(item)
+
+    def select_all(self):
+        """전체 선택"""
+        for i in range(self.address_list.count()):
+            item = self.address_list.item(i)
+            item.setCheckState(Qt.CheckState.Checked)
+
+    def select_none(self):
+        """전체 해제"""
+        for i in range(self.address_list.count()):
+            item = self.address_list.item(i)
+            item.setCheckState(Qt.CheckState.Unchecked)
+
+    def get_selected_emails(self):
+        """선택된 이메일 목록 반환"""
+        selected = []
+        for i in range(self.address_list.count()):
+            item = self.address_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                selected.append(item.text())
+        return selected
+
+
+class DailyReportDialog(QDialog):
+    """데일리 리포트 대화상자"""
+
+    def __init__(self, storage_manager, current_date):
+        super().__init__()
+
+        self.storage_manager = storage_manager
+        self.current_date = current_date
+        self.selected_recipients = []
+
+        self.setWindowTitle("데일리 리포트")
+        self.setMinimumSize(700, 650)  # 높이 증가 (중요 일정 포함 체크박스 추가로)
+        self.setMaximumSize(800, 750)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+
+        self.init_ui()
+        self.load_default_settings()
+
+    def init_ui(self):
+        """UI 초기화"""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
         # 제목
-        title_label = QLabel("📋 메일 예약 목록")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; padding: 10px;")
-        left_layout.addWidget(title_label)
+        title_label = QLabel("데일리 리포트 발송")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; padding: 5px; color: #333;")
+        layout.addWidget(title_label)
 
-        # 예약 목록
-        self.schedule_list = QListWidget()
-        self.schedule_list.itemClicked.connect(self.on_schedule_clicked)
-        left_layout.addWidget(self.schedule_list)
-
-        # 목록 버튼들
-        list_btn_layout = QHBoxLayout()
-
-        self.send_now_btn = QPushButton("즉시발송")
-        self.send_now_btn.clicked.connect(self.send_now)
-        self.send_now_btn.setStyleSheet("background: #28a745; color: white; padding: 8px; border-radius: 4px;")
-
-        self.delete_btn = QPushButton("삭제")
-        self.delete_btn.clicked.connect(self.delete_schedule)
-        self.delete_btn.setStyleSheet("background: #dc3545; color: white; padding: 8px; border-radius: 4px;")
-
-        self.toggle_btn = QPushButton("ON/OFF")
-        self.toggle_btn.clicked.connect(self.toggle_schedule)
-        self.toggle_btn.setStyleSheet("background: #6c757d; color: white; padding: 8px; border-radius: 4px;")
-
-        list_btn_layout.addWidget(self.send_now_btn)
-        list_btn_layout.addWidget(self.delete_btn)
-        list_btn_layout.addWidget(self.toggle_btn)
-        left_layout.addLayout(list_btn_layout)
-
-        layout.addWidget(left_frame, 1)
-
-        # === 오른쪽: 새 예약 추가 ===
-        right_frame = QFrame()
-        right_frame.setFrameStyle(QFrame.Shape.StyledPanel)
-        right_layout = QVBoxLayout(right_frame)
-
-        # 제목
-        add_title = QLabel("➕ 새 메일 예약")
-        add_title.setStyleSheet("font-size: 16px; font-weight: bold; padding: 10px;")
-        right_layout.addWidget(add_title)
-
-        # 스크롤 영역 (내용이 많아졌으므로)
+        # 스크롤 영역 생성
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
+        # 스크롤 컨텐츠 위젯
         scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
+        content_layout = QVBoxLayout(scroll_content)
 
-        # === 1. 기본 정보 ===
+        # === 기본 정보 (2열로 배치) ===
         basic_group = QGroupBox("기본 정보")
-        basic_layout = QVBoxLayout(basic_group)
+        basic_layout = QHBoxLayout(basic_group)
 
-        # 예약 이름
-        name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("이름:"))
-        self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("예: 주간보고")
-        name_layout.addWidget(self.name_edit)
-        basic_layout.addLayout(name_layout)
-
-        # 메일 제목
-        subject_layout = QHBoxLayout()
-        subject_layout.addWidget(QLabel("제목:"))
+        # 왼쪽: 제목
+        left_layout = QVBoxLayout()
+        left_layout.addWidget(QLabel("메일 제목:"))
         self.subject_edit = QLineEdit()
-        self.subject_edit.setPlaceholderText("예: 업무현황")
-        subject_layout.addWidget(self.subject_edit)
-        basic_layout.addLayout(subject_layout)
+        self.subject_edit.setPlaceholderText("예: 일일 업무 보고")
+        left_layout.addWidget(self.subject_edit)
 
-        # 수신자 (메일설정에서 불러오기 + 직접 입력)
-        recipient_layout = QVBoxLayout()
-        recipient_top = QHBoxLayout()
-        recipient_top.addWidget(QLabel("수신자:"))
+        # 오른쪽: 날짜
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(QLabel("보고 날짜:"))
+        self.date_edit = QDateEdit()
+        self.date_edit.setDate(QDate.fromString(self.current_date, "yyyy-MM-dd"))
+        self.date_edit.setCalendarPopup(True)
+        right_layout.addWidget(self.date_edit)
 
-        # 메일설정에서 불러오기 버튼
-        load_recipients_btn = QPushButton("📋 저장된 수신자")
-        load_recipients_btn.clicked.connect(self.load_saved_recipients)
-        load_recipients_btn.setStyleSheet(
-            "background: #17a2b8; color: white; padding: 4px 8px; border-radius: 3px; font-size: 11px;")
-        recipient_top.addWidget(load_recipients_btn)
-        recipient_top.addStretch()
+        basic_layout.addLayout(left_layout, 2)
+        basic_layout.addLayout(right_layout, 1)
+        content_layout.addWidget(basic_group)
 
-        recipient_layout.addLayout(recipient_top)
+        # === 수신자 선택 ===
+        recipient_group = QGroupBox("수신자 선택")
+        recipient_layout = QVBoxLayout(recipient_group)
 
-        # 수신자 목록 (여러명 지원)
-        self.recipients_list_widget = QListWidget()
-        self.recipients_list_widget.setMaximumHeight(60)
-        recipient_layout.addWidget(self.recipients_list_widget)
+        # 버튼들을 한 줄에 배치
+        button_row = QHBoxLayout()
 
-        # 수신자 추가/삭제
-        recipient_control = QHBoxLayout()
+        select_from_address_btn = QPushButton("📋 주소록에서 선택")
+        select_from_address_btn.clicked.connect(self.select_recipients_from_address_book)
+        select_from_address_btn.setStyleSheet("""
+            QPushButton {
+                background: #17a2b8;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #138496;
+            }
+        """)
+
+        clear_recipients_btn = QPushButton("전체 해제")
+        clear_recipients_btn.clicked.connect(self.clear_recipients)
+        clear_recipients_btn.setStyleSheet("background: #dc3545; color: white; padding: 6px 12px; border-radius: 3px;")
+
+        button_row.addWidget(select_from_address_btn)
+        button_row.addWidget(clear_recipients_btn)
+        button_row.addStretch()
+        recipient_layout.addLayout(button_row)
+
+        # 선택된 수신자 표시
+        self.selected_recipients_label = QLabel("선택된 수신자: 없음")
+        self.selected_recipients_label.setStyleSheet(
+            "color: #666; margin: 8px 0; padding: 12px; background: #f8f9fa; border-radius: 4px; min-height: 20px;")
+        self.selected_recipients_label.setWordWrap(True)
+        recipient_layout.addWidget(self.selected_recipients_label)
+
+        # 수신자 직접 추가
+        direct_add_layout = QHBoxLayout()
         self.recipient_edit = QLineEdit()
-        self.recipient_edit.setPlaceholderText("abc@company.com")
+        self.recipient_edit.setPlaceholderText("이메일 직접 입력")
 
         add_recipient_btn = QPushButton("추가")
-        add_recipient_btn.clicked.connect(self.add_recipient_to_list)
-        add_recipient_btn.setStyleSheet(
-            "background: #28a745; color: white; padding: 4px 8px; border-radius: 3px; font-size: 11px;")
+        add_recipient_btn.clicked.connect(self.add_recipient_directly)
+        add_recipient_btn.setStyleSheet("background: #28a745; color: white; padding: 6px 12px; border-radius: 3px;")
 
-        remove_recipient_btn = QPushButton("삭제")
-        remove_recipient_btn.clicked.connect(self.remove_recipient_from_list)
-        remove_recipient_btn.setStyleSheet(
-            "background: #dc3545; color: white; padding: 4px 8px; border-radius: 3px; font-size: 11px;")
+        direct_add_layout.addWidget(self.recipient_edit, 3)
+        direct_add_layout.addWidget(add_recipient_btn, 1)
+        recipient_layout.addLayout(direct_add_layout)
 
-        recipient_control.addWidget(self.recipient_edit)
-        recipient_control.addWidget(add_recipient_btn)
-        recipient_control.addWidget(remove_recipient_btn)
-        recipient_layout.addLayout(recipient_control)
+        content_layout.addWidget(recipient_group)
 
-        basic_layout.addLayout(recipient_layout)
-        scroll_layout.addWidget(basic_group)
-
-        # === 2. 발송 설정 ===
-        schedule_group = QGroupBox("발송 설정")
-        schedule_layout = QVBoxLayout(schedule_group)
-
-        # 발송 타입
-        type_layout = QHBoxLayout()
-        self.type_group = QButtonGroup()
-
-        self.once_radio = QRadioButton("한번만")
-        self.once_radio.setChecked(True)
-
-        self.daily_radio = QRadioButton("매일")
-        self.weekly_radio = QRadioButton("매주")
-
-        self.type_group.addButton(self.once_radio)
-        self.type_group.addButton(self.daily_radio)
-        self.type_group.addButton(self.weekly_radio)
-
-        # 라디오 버튼 그룹 시그널 연결
-        self.type_group.buttonClicked.connect(self.on_type_changed)
-
-        type_layout.addWidget(QLabel("타입:"))
-        type_layout.addWidget(self.once_radio)
-        type_layout.addWidget(self.daily_radio)
-        type_layout.addWidget(self.weekly_radio)
-        type_layout.addStretch()
-        schedule_layout.addLayout(type_layout)
-
-        # 날짜/시간 설정
-        datetime_layout = QVBoxLayout()
-
-        # 날짜 (한번만 발송시에만)
-        date_time_row1 = QHBoxLayout()
-        self.date_label = QLabel("날짜:")
-        self.date_edit = QDateEdit()
-        self.date_edit.setDate(QDate.currentDate().addDays(1))
-        self.date_edit.setCalendarPopup(True)
-
-        date_time_row1.addWidget(self.date_label)
-        date_time_row1.addWidget(self.date_edit)
-        date_time_row1.addStretch()
-        datetime_layout.addLayout(date_time_row1)
-
-        # 시간
-        date_time_row2 = QHBoxLayout()
-        time_label = QLabel("시간:")
-        self.time_edit = QTimeEdit()
-        self.time_edit.setTime(QTime(9, 0))
-        self.time_edit.setDisplayFormat("HH:mm")
-
-        date_time_row2.addWidget(time_label)
-        date_time_row2.addWidget(self.time_edit)
-        date_time_row2.addStretch()
-        datetime_layout.addLayout(date_time_row2)
-
-        # 요일 선택 (매주 발송시에만)
-        weekday_row = QHBoxLayout()
-        self.weekday_label = QLabel("요일:")
-        self.weekday_combo = QComboBox()
-        self.weekday_combo.addItems(["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"])
-
-        weekday_row.addWidget(self.weekday_label)
-        weekday_row.addWidget(self.weekday_combo)
-        weekday_row.addStretch()
-        datetime_layout.addLayout(weekday_row)
-
-        schedule_layout.addLayout(datetime_layout)
-        scroll_layout.addWidget(schedule_group)
-
-        # === 3. 카테고리 필터 ===
+        # === 카테고리 필터 ===
         category_group = QGroupBox("카테고리 필터")
         category_layout = QVBoxLayout(category_group)
 
@@ -265,65 +260,108 @@ class SimpleEmailDialog(QDialog):
             category_select_layout.addWidget(check)
 
         category_layout.addLayout(category_select_layout)
-        scroll_layout.addWidget(category_group)
+        content_layout.addWidget(category_group)
 
-        # === 4. 내용 설정 ===
-        content_group = QGroupBox("메일 내용")
-        content_layout = QHBoxLayout(content_group)
+        # === 포함 내용 + 추가 메모 (2열로 배치) ===
+        content_memo_layout = QHBoxLayout()
 
-        # 포함할 내용
-        self.all_check = QCheckBox("전체작업")
-        self.all_check.setChecked(True)
-        self.done_check = QCheckBox("완료작업")
-        self.todo_check = QCheckBox("미완료작업")
+        # 왼쪽: 포함 내용
+        content_group = QGroupBox("포함 내용")
+        content_layout_inner = QVBoxLayout(content_group)
 
-        content_layout.addWidget(QLabel("포함:"))
-        content_layout.addWidget(self.all_check)
-        content_layout.addWidget(self.done_check)
-        content_layout.addWidget(self.todo_check)
+        self.all_tasks_check = QCheckBox("전체 작업")
+        self.all_tasks_check.setChecked(True)
+        self.completed_tasks_check = QCheckBox("완료된 작업만")
+        self.incomplete_tasks_check = QCheckBox("미완료 작업만")
 
-        # 기간
-        self.period_combo = QComboBox()
-        self.period_combo.addItems(["오늘", "이번주", "저번주"])
-        content_layout.addWidget(QLabel("기간:"))
-        content_layout.addWidget(self.period_combo)
-        content_layout.addStretch()
+        content_layout_inner.addWidget(self.all_tasks_check)
+        content_layout_inner.addWidget(self.completed_tasks_check)
+        content_layout_inner.addWidget(self.incomplete_tasks_check)
 
-        scroll_layout.addWidget(content_group)
+        # 중요 일정 포함 체크박스 추가 (새로운 기능)
+        self.include_important_check = QCheckBox("미완료 중요 일정 포함 (최근 30일)")
+        self.include_important_check.setChecked(True)  # 기본 체크됨
+        self.include_important_check.setToolTip("다른 날짜의 미완료 중요 작업을 별도 섹션으로 포함합니다.")
+        self.include_important_check.setStyleSheet("color: #d32f2f; font-weight: bold;")
+        content_layout_inner.addWidget(self.include_important_check)
+
+        # 오른쪽: 추가 메모
+        memo_group = QGroupBox("추가 메모")
+        memo_layout = QVBoxLayout(memo_group)
+
+        self.memo_edit = QTextEdit()
+        self.memo_edit.setPlaceholderText("추가 메모...")
+        self.memo_edit.setMaximumHeight(80)
+        memo_layout.addWidget(self.memo_edit)
+
+        content_memo_layout.addWidget(content_group, 1)
+        content_memo_layout.addWidget(memo_group, 2)
+        content_layout.addLayout(content_memo_layout)
+
+        # === 미리보기 ===
+        preview_group = QGroupBox("리포트 미리보기")
+        preview_layout = QVBoxLayout(preview_group)
+
+        preview_btn_layout = QHBoxLayout()
+        preview_btn = QPushButton("🔍 미리보기 생성")
+        preview_btn.clicked.connect(self.generate_preview)
+        preview_btn.setStyleSheet("""
+            QPushButton {
+                background: #ffc107;
+                color: black;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #e0a800;
+            }
+        """)
+        preview_btn_layout.addWidget(preview_btn)
+        preview_btn_layout.addStretch()
+        preview_layout.addLayout(preview_btn_layout)
+
+        self.preview_text = QTextEdit()
+        self.preview_text.setReadOnly(True)
+        self.preview_text.setMaximumHeight(120)
+        self.preview_text.setStyleSheet("background: #f8f9fa; border: 1px solid #dee2e6; font-size: 11px;")
+        preview_layout.addWidget(self.preview_text)
+
+        content_layout.addWidget(preview_group)
 
         # 스크롤 영역 설정
         scroll_area.setWidget(scroll_content)
-        right_layout.addWidget(scroll_area)
+        layout.addWidget(scroll_area)
 
-        # === 버튼들 ===
-        btn_layout = QVBoxLayout()
+        # === 버튼 ===
+        button_layout = QHBoxLayout()
 
-        # 테스트 발송
-        test_btn = QPushButton("🧪 테스트 발송")
-        test_btn.clicked.connect(self.test_send)
-        test_btn.setStyleSheet(
-            "background: #17a2b8; color: white; padding: 12px; border-radius: 4px; font-weight: bold;")
-        btn_layout.addWidget(test_btn)
+        send_btn = QPushButton("📧 발송")
+        send_btn.clicked.connect(self.send_report)
+        send_btn.setStyleSheet("""
+            QPushButton {
+                background: #28a745;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background: #218838;
+            }
+        """)
 
-        # 예약 추가
-        add_btn = QPushButton("➕ 예약 추가")
-        add_btn.clicked.connect(self.add_schedule)
-        add_btn.setStyleSheet(
-            "background: #007bff; color: white; padding: 12px; border-radius: 4px; font-weight: bold;")
-        btn_layout.addWidget(add_btn)
-
-        # 닫기
         close_btn = QPushButton("닫기")
         close_btn.clicked.connect(self.accept)
-        close_btn.setStyleSheet("background: #6c757d; color: white; padding: 8px; border-radius: 4px;")
-        btn_layout.addWidget(close_btn)
+        close_btn.setStyleSheet(
+            "background: #6c757d; color: white; padding: 10px 20px; border-radius: 4px; font-size: 14px;")
 
-        right_layout.addLayout(btn_layout)
+        button_layout.addWidget(send_btn)
+        button_layout.addStretch()
+        button_layout.addWidget(close_btn)
 
-        layout.addWidget(right_frame, 1)
-
-        # 초기 상태 설정
-        self.on_type_changed()
+        layout.addLayout(button_layout)
 
     def on_all_categories_changed(self, state):
         """모든 카테고리 체크박스 상태 변경"""
@@ -352,7 +390,7 @@ class SimpleEmailDialog(QDialog):
         """선택된 카테고리 목록 반환"""
         # 수정: 모든 카테고리 체크박스와 개별 체크박스 상태 모두 확인
         if self.all_categories_check.isChecked() and all(check.isChecked() for check in self.category_checks.values()):
-            print("Simple Email - 카테고리 필터: 모든 카테고리 선택됨")
+            print("카테고리 필터: 모든 카테고리 선택됨")
             return None  # 모든 카테고리
 
         selected_categories = []
@@ -360,139 +398,70 @@ class SimpleEmailDialog(QDialog):
             if check.isChecked():
                 selected_categories.append(category_name)
 
-        print(f"Simple Email - 카테고리 필터: 선택된 카테고리 = {selected_categories}")
+        print(f"카테고리 필터: 선택된 카테고리 = {selected_categories}")
         return selected_categories if selected_categories else None
 
-    def on_type_changed(self, button=None):
-        """발송 타입 변경시 - 버튼 클릭 시에만 호출됨"""
+    def load_default_settings(self):
+        """기본 설정 로드"""
+        # 오늘 날짜로 기본 제목 설정
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        default_subject = f"{today_str} 일일 업무 보고"
+        self.subject_edit.setText(default_subject)
+
+    def select_recipients_from_address_book(self):
+        """주소록에서 수신자 선택"""
         try:
-            # 현재 선택된 버튼 확인
-            is_once = self.once_radio.isChecked()
-            is_weekly = self.weekly_radio.isChecked()
+            # 주소록 로드
+            address_book = self.load_address_book()
 
-            print(f"타입 변경: 한번만={is_once}, 매주={is_weekly}")  # 디버깅용
+            if not address_book:
+                QMessageBox.warning(self, "주소록 없음",
+                                    "주소록이 비어있습니다.\n먼저 '옵션 > 메일 설정 > 주소록'에서 이메일 주소를 추가하세요.")
+                return
 
-            # 날짜는 한번만 발송시에만 표시
-            self.date_label.setVisible(is_once)
-            self.date_edit.setVisible(is_once)
-
-            # 요일은 매주 발송시에만 표시
-            self.weekday_label.setVisible(is_weekly)
-            self.weekday_combo.setVisible(is_weekly)
-
-            print(f"요일 표시 상태: {is_weekly}")  # 디버깅용
+            # 주소록 선택 대화상자 열기
+            dialog = AddressBookSelectionDialog(address_book, self.selected_recipients)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.selected_recipients = dialog.get_selected_emails()
+                self.update_selected_recipients_display()
 
         except Exception as e:
-            print(f"타입 변경 중 오류: {e}")
+            QMessageBox.critical(self, "오류", f"주소록 불러오기 중 오류가 발생했습니다:\n{e}")
 
-    def load_saved_recipients(self):
-        """메일설정에서 저장된 수신자 목록을 선택해서 추가"""
+    def load_address_book(self):
+        """저장된 주소록 로드"""
         try:
             settings_file = "data/email_settings.json"
             if os.path.exists(settings_file):
                 with open(settings_file, "r", encoding="utf-8") as f:
                     settings = json.load(f)
-
-                saved_recipients = settings.get("recipients", [])
-                if saved_recipients:
-                    # 수신자 선택 다이얼로그 표시
-                    self.show_recipient_selection_dialog(saved_recipients)
-                else:
-                    QMessageBox.information(self, "수신자 없음", "저장된 수신자가 없습니다.\n메일설정에서 수신자를 먼저 등록하세요.")
-            else:
-                QMessageBox.information(self, "설정 없음", "메일설정 파일이 없습니다.")
-
+                return settings.get("recipients", [])
         except Exception as e:
-            QMessageBox.warning(self, "오류", f"수신자 불러오기 실패:\n{e}")
+            print(f"주소록 로드 중 오류: {e}")
+        return []
 
-    def show_recipient_selection_dialog(self, saved_recipients):
-        """수신자 선택 다이얼로그 표시"""
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QCheckBox
+    def update_selected_recipients_display(self):
+        """선택된 수신자 표시 업데이트"""
+        count = len(self.selected_recipients)
+        if count == 0:
+            self.selected_recipients_label.setText("선택된 수신자: 없음")
+            self.selected_recipients_label.setStyleSheet(
+                "color: #999; margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px;")
+        elif count <= 2:
+            # 2명 이하면 모든 이메일 표시
+            emails = ", ".join(self.selected_recipients)
+            self.selected_recipients_label.setText(f"선택된 수신자: {emails}")
+            self.selected_recipients_label.setStyleSheet(
+                "color: #333; margin: 10px 0; padding: 10px; background: #e8f5e8; border-radius: 4px; border: 1px solid #4CAF50;")
+        else:
+            # 2명 초과면 처음 2명만 표시하고 나머지는 개수로
+            first_two = ", ".join(self.selected_recipients[:2])
+            self.selected_recipients_label.setText(f"선택된 수신자: {first_two} 외 {count - 2}명")
+            self.selected_recipients_label.setStyleSheet(
+                "color: #333; margin: 10px 0; padding: 10px; background: #e8f5e8; border-radius: 4px; border: 1px solid #4CAF50;")
 
-        dialog = QDialog(self)
-        dialog.setWindowTitle("수신자 선택")
-        dialog.setMinimumSize(400, 300)
-
-        layout = QVBoxLayout(dialog)
-
-        # 안내 메시지
-        info_label = QLabel("추가할 수신자를 선택하세요:")
-        layout.addWidget(info_label)
-
-        # 수신자 목록 (체크박스 형태)
-        self.recipient_checkboxes = []
-        current_recipients = self.get_current_recipients()
-
-        for recipient in saved_recipients:
-            checkbox = QCheckBox(recipient)
-            # 이미 추가된 수신자는 비활성화
-            if recipient in current_recipients:
-                checkbox.setChecked(False)
-                checkbox.setEnabled(False)
-                checkbox.setText(f"{recipient} (이미 추가됨)")
-            else:
-                checkbox.setChecked(False)
-
-            self.recipient_checkboxes.append(checkbox)
-            layout.addWidget(checkbox)
-
-        # 버튼
-        button_layout = QHBoxLayout()
-
-        select_all_btn = QPushButton("전체 선택")
-        select_all_btn.clicked.connect(lambda: self.toggle_all_recipients(True))
-        button_layout.addWidget(select_all_btn)
-
-        select_none_btn = QPushButton("전체 해제")
-        select_none_btn.clicked.connect(lambda: self.toggle_all_recipients(False))
-        button_layout.addWidget(select_none_btn)
-
-        button_layout.addStretch()
-
-        add_selected_btn = QPushButton("선택한 수신자 추가")
-        add_selected_btn.clicked.connect(lambda: self.add_selected_recipients(dialog))
-        add_selected_btn.setStyleSheet(
-            "background: #28a745; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold;")
-        button_layout.addWidget(add_selected_btn)
-
-        cancel_btn = QPushButton("취소")
-        cancel_btn.clicked.connect(dialog.reject)
-        cancel_btn.setStyleSheet("background: #6c757d; color: white; padding: 6px 12px; border-radius: 4px;")
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-        dialog.exec()
-
-    def toggle_all_recipients(self, select_all):
-        """모든 수신자 선택/해제"""
-        for checkbox in self.recipient_checkboxes:
-            if checkbox.isEnabled():  # 비활성화된 것은 제외
-                checkbox.setChecked(select_all)
-
-    def add_selected_recipients(self, dialog):
-        """선택된 수신자들을 목록에 추가"""
-        selected_recipients = []
-
-        for checkbox in self.recipient_checkboxes:
-            if checkbox.isChecked() and checkbox.isEnabled():
-                # 텍스트에서 이메일 주소만 추출
-                email = checkbox.text().split(" (이미 추가됨)")[0]
-                selected_recipients.append(email)
-
-        if not selected_recipients:
-            QMessageBox.information(dialog, "선택 없음", "추가할 수신자를 선택하세요.")
-            return
-
-        # 선택된 수신자들을 목록에 추가
-        for recipient in selected_recipients:
-            self.recipients_list_widget.addItem(recipient)
-
-        QMessageBox.information(dialog, "추가 완료", f"{len(selected_recipients)}명의 수신자가 추가되었습니다.")
-        dialog.accept()
-
-    def add_recipient_to_list(self):
-        """수신자 목록에 추가"""
+    def add_recipient_directly(self):
+        """수신자 직접 추가"""
         email = self.recipient_edit.text().strip()
         if not email:
             return
@@ -502,558 +471,564 @@ class SimpleEmailDialog(QDialog):
             return
 
         # 중복 확인
-        current_recipients = self.get_current_recipients()
-        if email in current_recipients:
+        if email in self.selected_recipients:
             QMessageBox.warning(self, "중복", "이미 추가된 수신자입니다.")
             return
 
-        self.recipients_list_widget.addItem(email)
+        self.selected_recipients.append(email)
+        self.update_selected_recipients_display()
         self.recipient_edit.clear()
 
-    def remove_recipient_from_list(self):
-        """선택한 수신자 삭제"""
-        current_item = self.recipients_list_widget.currentItem()
-        if current_item:
-            row = self.recipients_list_widget.row(current_item)
-            self.recipients_list_widget.takeItem(row)
-        else:
-            QMessageBox.information(self, "선택 없음", "삭제할 수신자를 선택하세요.")
+    def clear_recipients(self):
+        """모든 수신자 해제"""
+        self.selected_recipients = []
+        self.update_selected_recipients_display()
 
-    def get_current_recipients(self):
-        """현재 수신자 목록 반환"""
-        recipients = []
-        for i in range(self.recipients_list_widget.count()):
-            recipients.append(self.recipients_list_widget.item(i).text())
-        return recipients
-
-    def add_schedule(self):
-        """새 예약 추가"""
+    def generate_preview(self):
+        """리포트 미리보기 생성"""
         try:
-            # 입력 검증
-            name = self.name_edit.text().strip()
-            subject = self.subject_edit.text().strip()
-            recipients = self.get_current_recipients()
+            # 선택된 날짜의 작업 데이터 수집
+            selected_date = self.date_edit.date().toString("yyyy-MM-dd")
+            tasks_data = self.collect_tasks_data(selected_date)
 
-            if not name or not subject:
-                QMessageBox.warning(self, "입력 오류", "이름과 제목을 입력하세요.")
-                return
-
-            if not recipients:
-                QMessageBox.warning(self, "수신자 오류", "수신자를 최소 1명 추가하세요.")
-                return
-
-            # 내용 타입 수집
-            content_types = []
-            if self.all_check.isChecked(): content_types.append("all")
-            if self.done_check.isChecked(): content_types.append("completed")
-            if self.todo_check.isChecked(): content_types.append("incomplete")
-
-            if not content_types:
-                QMessageBox.warning(self, "내용 오류", "포함할 내용을 최소 1개 선택하세요.")
-                return
-
-            # 카테고리 선택 확인
-            selected_categories = self.get_selected_categories()
-            if selected_categories is not None and len(selected_categories) == 0:
-                QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
-                return
-
-            # 예약 데이터 생성
-            schedule = {
-                "id": datetime.now().strftime("%Y%m%d_%H%M%S"),
-                "name": name,
-                "custom_title": subject,
-                "recipients": recipients,
-                "content_types": content_types,
-                "period": self.period_combo.currentText(),
-                "send_time": self.time_edit.time().toString("HH:mm"),
-                "enabled": True,
-                "created_at": datetime.now().isoformat(),
-                "last_sent_date": None,
-                "last_sent_time": None,
-                "selected_categories": selected_categories  # 카테고리 필터 추가
-            }
-
-            # 발송 타입에 따라 설정
-            if self.once_radio.isChecked():
-                schedule["is_recurring"] = False
-                schedule["send_date"] = self.date_edit.date().toString("yyyy-MM-dd")
-            elif self.daily_radio.isChecked():
-                schedule["is_recurring"] = True
-                schedule["frequency"] = "daily"
-            elif self.weekly_radio.isChecked():
-                schedule["is_recurring"] = True
-                schedule["frequency"] = "weekly"
-                # 요일 정보 추가
-                weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-                selected_weekday = weekdays[self.weekday_combo.currentIndex()]
-                schedule["weekday"] = selected_weekday
-
-            # 저장
-            self.email_schedules.append(schedule)
-            self.save_email_schedules()
-            self.load_schedule_list()
-            self.clear_inputs()
-
-            QMessageBox.information(self, "성공", f"'{name}' 예약이 추가되었습니다!")
+            # 미리보기 텍스트 생성
+            preview_text = self.create_preview_text(tasks_data, selected_date)
+            self.preview_text.setPlainText(preview_text)
 
         except Exception as e:
-            QMessageBox.critical(self, "오류", f"예약 추가 실패:\n{e}")
+            QMessageBox.critical(self, "미리보기 오류", f"미리보기 생성 중 오류가 발생했습니다:\n{e}")
 
-    def clear_inputs(self):
-        """입력 필드 초기화"""
-        self.name_edit.clear()
-        self.subject_edit.clear()
-        self.recipients_list_widget.clear()
-        self.recipient_edit.clear()
-        self.once_radio.setChecked(True)
+    def collect_tasks_data(self, date_str):
+        """지정된 날짜의 작업 데이터 수집 (카테고리 필터 적용) + 중요 일정 포함"""
+        # 1단계: 해당 날짜에 생성된 작업만 먼저 필터링
+        all_tasks = self.storage_manager.get_tasks_by_date(date_str)
+        date_tasks = [t for t in all_tasks if t.created_date == date_str]
 
-        # 카테고리 선택 초기화
-        self.all_categories_check.setChecked(True)
-        for check in self.category_checks.values():
-            check.setChecked(True)
+        print(f"1단계 - 날짜별 필터링: {date_str}에 생성된 작업 {len(date_tasks)}개")
 
-        self.on_type_changed()
-
-    def load_schedule_list(self):
-        """예약 목록 로드"""
-        self.schedule_list.clear()
-
-        for schedule in self.email_schedules:
-            # 표시 텍스트 생성
-            name = schedule.get("name", "이름없음")
-            enabled = "✅" if schedule.get("enabled", True) else "⏸️"
-
-            if schedule.get("is_recurring", False):
-                freq_map = {"daily": "매일", "weekly": "매주"}
-                freq = freq_map.get(schedule.get("frequency", "daily"), "매일")
-                time_info = f"{freq} {schedule.get('send_time', '09:00')}"
-
-                # 매주인 경우 요일 추가
-                if schedule.get("frequency") == "weekly" and schedule.get("weekday"):
-                    weekday_map = {
-                        "monday": "월", "tuesday": "화", "wednesday": "수",
-                        "thursday": "목", "friday": "금", "saturday": "토", "sunday": "일"
-                    }
-                    weekday_kr = weekday_map.get(schedule.get("weekday"), "월")
-                    time_info = f"매주 {weekday_kr}요일 {schedule.get('send_time', '09:00')}"
-
-                type_icon = "🔄"
-            else:
-                date = schedule.get("send_date", "날짜미정")
-                time = schedule.get("send_time", "09:00")
-                time_info = f"{date} {time}"
-                type_icon = "📧"
-
-            # 카테고리 필터 정보 추가
-            category_info = ""
-            selected_categories = schedule.get("selected_categories")
-            if selected_categories is not None and len(selected_categories) > 0:
-                if len(selected_categories) <= 2:
-                    category_info = f" [카테고리: {', '.join(selected_categories)}]"
-                else:
-                    category_info = f" [카테고리: {', '.join(selected_categories[:2])} 외 {len(selected_categories) - 2}개]"
-
-            # 발송 이력 정보 추가 - 개선된 표시
-            last_sent_info = ""
-            last_sent_date = schedule.get("last_sent_date")
-            last_sent_time = schedule.get("last_sent_time")
-            total_sent = schedule.get("total_sent_count", 0)
-
-            if last_sent_date and last_sent_time:
-                last_sent_info = f"\n최근발송: {last_sent_date} {last_sent_time}"
-                if total_sent > 1:
-                    last_sent_info += f" | 총 {total_sent}회"
-            elif total_sent > 0:
-                last_sent_info = f"\n총 발송: {total_sent}회"
-
-            display_text = f"{enabled} {type_icon} {name} | {time_info}{category_info}{last_sent_info}"
-
-            item = QListWidgetItem(display_text)
-            item.setData(Qt.ItemDataRole.UserRole, schedule)
-            self.schedule_list.addItem(item)
-
-    def send_now(self):
-        """선택한 예약 즉시 발송"""
-        current_item = self.schedule_list.currentItem()
-        if not current_item:
-            QMessageBox.information(self, "선택없음", "발송할 예약을 선택하세요.")
-            return
-
-        schedule = current_item.data(Qt.ItemDataRole.UserRole)
-        if self.send_email(schedule):
-            # 발송 성공 시 발송 이력 업데이트
-            self.update_schedule_send_history(schedule)
-            QMessageBox.information(self, "발송완료", f"'{schedule['name']}' 메일을 발송했습니다!")
-
-    def update_schedule_send_history(self, schedule):
-        """예약 발송 이력 업데이트"""
-        try:
-            current_time = datetime.now()
-            schedule_id = schedule["id"]
-
-            # 해당 스케줄 찾아서 업데이트
-            for s in self.email_schedules:
-                if s["id"] == schedule_id:
-                    s["last_sent_date"] = current_time.strftime("%Y-%m-%d")
-                    s["last_sent_time"] = current_time.strftime("%H:%M")
-                    s["total_sent_count"] = s.get("total_sent_count", 0) + 1
-                    print(
-                        f"예약 '{s['name']}' 발송 이력 업데이트: {s['last_sent_date']} {s['last_sent_time']} (총 {s['total_sent_count']}회)")
-                    break
-
-            # 저장하고 목록 새로고침
-            self.save_email_schedules()
-            self.load_schedule_list()
-
-        except Exception as e:
-            print(f"예약 발송 이력 업데이트 중 오류: {e}")
-
-    def check_auto_send(self):
-        """자동 발송 체크 (1분마다 실행)"""
-        try:
-            now = datetime.now()
-            current_date = now.strftime("%Y-%m-%d")
-            current_time = now.strftime("%H:%M")
-            current_weekday = now.weekday()
-
-            for schedule in self.email_schedules:
-                if not schedule.get("enabled", True):
-                    continue
-
-                if schedule.get("send_time") != current_time:
-                    continue
-
-                if schedule.get("last_sent_date") == current_date:
-                    continue
-
-                should_send = False
-
-                if schedule.get("is_recurring", False):
-                    freq = schedule.get("frequency", "daily")
-                    if freq == "daily":
-                        should_send = True
-                    elif freq == "weekly":
-                        # 매주 발송: 지정된 요일인지 확인
-                        schedule_weekday = schedule.get("weekday", "monday")
-                        weekday_map = {
-                            "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-                            "friday": 4, "saturday": 5, "sunday": 6
-                        }
-                        target_weekday = weekday_map.get(schedule_weekday, 0)
-                        if current_weekday == target_weekday:
-                            should_send = True
-                else:
-                    if schedule.get("send_date") == current_date:
-                        should_send = True
-
-                if should_send:
-                    if self.send_email(schedule):
-                        # 발송 이력 업데이트
-                        schedule["last_sent_date"] = current_date
-                        schedule["last_sent_time"] = current_time
-                        schedule["total_sent_count"] = schedule.get("total_sent_count", 0) + 1
-
-                        if not schedule.get("is_recurring", False):
-                            schedule["enabled"] = False
-
-                        self.save_email_schedules()
-                        self.load_schedule_list()
-                        print(f"자동 발송 완료: {schedule['name']} (총 {schedule['total_sent_count']}회)")
-
-        except Exception as e:
-            print(f"자동 발송 체크 오류: {e}")
-
-    def add_schedule(self):
-        """새 예약 추가"""
-        try:
-            # 입력 검증
-            name = self.name_edit.text().strip()
-            subject = self.subject_edit.text().strip()
-            recipients = self.get_current_recipients()
-
-            if not name or not subject:
-                QMessageBox.warning(self, "입력 오류", "이름과 제목을 입력하세요.")
-                return
-
-            if not recipients:
-                QMessageBox.warning(self, "수신자 오류", "수신자를 최소 1명 추가하세요.")
-                return
-
-            # 내용 타입 수집
-            content_types = []
-            if self.all_check.isChecked(): content_types.append("all")
-            if self.done_check.isChecked(): content_types.append("completed")
-            if self.todo_check.isChecked(): content_types.append("incomplete")
-
-            if not content_types:
-                QMessageBox.warning(self, "내용 오류", "포함할 내용을 최소 1개 선택하세요.")
-                return
-
-            # 카테고리 선택 확인
-            selected_categories = self.get_selected_categories()
-            if selected_categories is not None and len(selected_categories) == 0:
-                QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
-                return
-
-            # 예약 데이터 생성
-            schedule = {
-                "id": datetime.now().strftime("%Y%m%d_%H%M%S"),
-                "name": name,
-                "custom_title": subject,
-                "recipients": recipients,
-                "content_types": content_types,
-                "period": self.period_combo.currentText(),
-                "send_time": self.time_edit.time().toString("HH:mm"),
-                "enabled": True,
-                "created_at": datetime.now().isoformat(),
-                "last_sent_date": None,
-                "last_sent_time": None,
-                "total_sent_count": 0,  # 발송 이력 필드 추가
-                "selected_categories": selected_categories  # 카테고리 필터 추가
-            }
-
-            # 발송 타입에 따라 설정
-            if self.once_radio.isChecked():
-                schedule["is_recurring"] = False
-                schedule["send_date"] = self.date_edit.date().toString("yyyy-MM-dd")
-            elif self.daily_radio.isChecked():
-                schedule["is_recurring"] = True
-                schedule["frequency"] = "daily"
-            elif self.weekly_radio.isChecked():
-                schedule["is_recurring"] = True
-                schedule["frequency"] = "weekly"
-                # 요일 정보 추가
-                weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-                selected_weekday = weekdays[self.weekday_combo.currentIndex()]
-                schedule["weekday"] = selected_weekday
-
-            # 저장
-            self.email_schedules.append(schedule)
-            self.save_email_schedules()
-            self.load_schedule_list()
-            self.clear_inputs()
-
-            QMessageBox.information(self, "성공", f"'{name}' 예약이 추가되었습니다!")
-
-        except Exception as e:
-            QMessageBox.critical(self, "오류", f"예약 추가 실패:\n{e}")
-
-    def load_email_schedules(self):
-        """예약 데이터 로드"""
-        try:
-            file_path = "data/email_schedules.json"
-            if os.path.exists(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    schedules = json.load(f)
-
-                # 기존 예약에 발송 이력 필드가 없으면 추가
-                for schedule in schedules:
-                    if "last_sent_date" not in schedule:
-                        schedule["last_sent_date"] = None
-                    if "last_sent_time" not in schedule:
-                        schedule["last_sent_time"] = None
-                    if "total_sent_count" not in schedule:
-                        schedule["total_sent_count"] = 0
-
-                return schedules
-        except Exception as e:
-            print(f"예약 로드 오류: {e}")
-        return []
-
-    def on_schedule_clicked(self, item):
-        """예약 선택시"""
-        pass
-
-    def send_now(self):
-        """선택한 예약 즉시 발송"""
-        current_item = self.schedule_list.currentItem()
-        if not current_item:
-            QMessageBox.information(self, "선택없음", "발송할 예약을 선택하세요.")
-            return
-
-        schedule = current_item.data(Qt.ItemDataRole.UserRole)
-        if self.send_email(schedule):
-            # 발송 성공 시 마지막 발송 시간 업데이트
-            self.update_last_sent_time(schedule)
-            QMessageBox.information(self, "발송완료", f"'{schedule['name']}' 메일을 발송했습니다!")
-
-    def delete_schedule(self):
-        """선택한 예약 삭제"""
-        current_item = self.schedule_list.currentItem()
-        if not current_item:
-            QMessageBox.information(self, "선택없음", "삭제할 예약을 선택하세요.")
-            return
-
-        schedule = current_item.data(Qt.ItemDataRole.UserRole)
-        reply = QMessageBox.question(self, "삭제확인", f"'{schedule['name']}' 예약을 삭제하시겠습니까?")
-
-        if reply == QMessageBox.StandardButton.Yes:
-            self.email_schedules = [s for s in self.email_schedules if s["id"] != schedule["id"]]
-            self.save_email_schedules()
-            self.load_schedule_list()
-            QMessageBox.information(self, "삭제완료", "예약이 삭제되었습니다.")
-
-    def toggle_schedule(self):
-        """선택한 예약 활성화/비활성화"""
-        current_item = self.schedule_list.currentItem()
-        if not current_item:
-            QMessageBox.information(self, "선택없음", "변경할 예약을 선택하세요.")
-            return
-
-        schedule = current_item.data(Qt.ItemDataRole.UserRole)
-        schedule_id = schedule["id"]
-
-        # 상태 토글
-        for s in self.email_schedules:
-            if s["id"] == schedule_id:
-                s["enabled"] = not s.get("enabled", True)
-                break
-
-        self.save_email_schedules()
-        self.load_schedule_list()
-
-    def test_send(self):
-        """테스트 메일 발송"""
-        recipients = self.get_current_recipients()
-        if not recipients:
-            QMessageBox.warning(self, "수신자 오류", "테스트할 수신자를 추가하세요.")
-            return
-
-        # 카테고리 필터 확인
+        # 2단계: 카테고리 필터 적용
         selected_categories = self.get_selected_categories()
-        if selected_categories is not None and len(selected_categories) == 0:
-            QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
-            return
+        if selected_categories is not None:  # 특정 카테고리만 선택된 경우
+            filtered_tasks = [t for t in date_tasks if t.category in selected_categories]
+            print(f"2단계 - 카테고리 필터링: {selected_categories} 카테고리로 필터링 -> {len(filtered_tasks)}개 작업")
+        else:
+            filtered_tasks = date_tasks
+            print(f"2단계 - 카테고리 필터링: 모든 카테고리 포함 -> {len(filtered_tasks)}개 작업")
 
-        temp_schedule = {
-            "custom_title": self.subject_edit.text().strip() or "테스트",
-            "recipients": recipients,
-            "content_types": ["all"],
-            "period": "오늘",
-            "selected_categories": selected_categories
+        # 3단계: 미완료 중요 일정 수집 (체크박스 확인)
+        important_tasks = []
+        if self.include_important_check.isChecked():
+            important_tasks = self.get_important_incomplete_tasks(date_str, selected_categories)
+            print(f"3단계 - 미완료 중요 일정: {len(important_tasks)}개")
+
+        return {
+            "all": filtered_tasks,
+            "completed": [t for t in filtered_tasks if t.completed],
+            "incomplete": [t for t in filtered_tasks if not t.completed],
+            "total": len(filtered_tasks),
+            "completed_count": len([t for t in filtered_tasks if t.completed]),
+            "completion_rate": (
+                    len([t for t in filtered_tasks if t.completed]) / len(
+                filtered_tasks) * 100) if filtered_tasks else 0,
+            "important_tasks": important_tasks  # 중요 일정 추가
         }
 
-        if self.send_email(temp_schedule, is_test=True):
-            QMessageBox.information(self, "테스트완료", f"{len(recipients)}명에게 테스트 메일을 발송했습니다!")
+    def get_important_incomplete_tasks(self, current_date, selected_categories):
+        """지난 30일간의 다른 날짜 미완료 중요 작업 수집"""
+        from datetime import datetime, timedelta
 
-    def update_last_sent_time(self, schedule):
-        """마지막 발송 시간 업데이트"""
         try:
-            current_time = datetime.now()
-            schedule_id = schedule["id"]
+            # 30일 전 날짜 계산
+            current_dt = datetime.strptime(current_date, "%Y-%m-%d")
+            thirty_days_ago = current_dt - timedelta(days=30)
+            thirty_days_ago_str = thirty_days_ago.strftime("%Y-%m-%d")
 
-            # 해당 스케줄 찾아서 업데이트
-            for s in self.email_schedules:
-                if s["id"] == schedule_id:
-                    s["last_sent_date"] = current_time.strftime("%Y-%m-%d")
-                    s["last_sent_time"] = current_time.strftime("%H:%M")
-                    break
+            # 모든 작업에서 조건에 맞는 작업 필터링
+            important_tasks = []
+            for task in self.storage_manager.tasks:
+                # 조건: 다른 날짜 + 미완료 + 중요 + 최근 30일 내
+                if (task.created_date != current_date and
+                        not task.completed and
+                        task.important and
+                        thirty_days_ago_str <= task.created_date <= current_date):
 
-            # 저장하고 목록 새로고침
-            self.save_email_schedules()
-            self.load_schedule_list()
+                    # 카테고리 필터 적용
+                    if selected_categories is None or task.category in selected_categories:
+                        important_tasks.append(task)
+
+            # 날짜순으로 정렬 (최신순)
+            important_tasks.sort(key=lambda x: x.created_date, reverse=True)
+
+            print(f"미완료 중요 일정 수집: {len(important_tasks)}개 (기간: {thirty_days_ago_str} ~ {current_date})")
+            return important_tasks
 
         except Exception as e:
-            print(f"마지막 발송 시간 업데이트 중 오류: {e}")
+            print(f"미완료 중요 일정 수집 중 오류: {e}")
+            return []
 
-    def check_auto_send(self):
-        """자동 발송 체크 (1분마다 실행)"""
+    def create_preview_text(self, tasks_data, date_str):
+        """미리보기 텍스트 생성"""
+        preview = f"=== {date_str} 일일 업무 보고 ===\n\n"
+
+        # 카테고리 필터 정보 표시
+        selected_categories = self.get_selected_categories()
+        if selected_categories is not None:
+            preview += f"📂 포함된 카테고리: {', '.join(selected_categories)}\n\n"
+        else:
+            preview += f"📂 포함된 카테고리: 모든 카테고리\n\n"
+
+        # 통계
+        preview += f"업무 현황\n"
+        preview += f"• 전체 작업: {tasks_data['total']}개\n"
+        preview += f"• 완료: {tasks_data['completed_count']}개\n"
+        preview += f"• 미완료: {tasks_data['total'] - tasks_data['completed_count']}개\n"
+        preview += f"• 완료율: {tasks_data['completion_rate']:.1f}%\n\n"
+
+        # 선택된 내용에 따라 작업 목록 추가
+        if self.all_tasks_check.isChecked() and tasks_data['all']:
+            preview += "📋 전체 작업 목록\n"
+            for i, task in enumerate(tasks_data['all'], 1):
+                status = "✅" if task.completed else "⏳"
+                importance = "⭐ " if task.important else ""
+                preview += f"{i}. {status} {importance}[{task.category}] {task.title}\n"
+            preview += "\n"
+
+        if self.completed_tasks_check.isChecked() and tasks_data['completed']:
+            preview += "✅ 완료된 작업\n"
+            for i, task in enumerate(tasks_data['completed'], 1):
+                importance = "⭐ " if task.important else ""
+                preview += f"{i}. {importance}[{task.category}] {task.title}\n"
+            preview += "\n"
+
+        if self.incomplete_tasks_check.isChecked() and tasks_data['incomplete']:
+            preview += "⏳ 미완료 작업\n"
+            for i, task in enumerate(tasks_data['incomplete'], 1):
+                importance = "⭐ " if task.important else ""
+                preview += f"{i}. {importance}[{task.category}] {task.title}\n"
+            preview += "\n"
+
+        # 미완료 중요 일정 (새로 추가된 기능)
+        if self.include_important_check.isChecked() and tasks_data.get('important_tasks'):
+            preview += "📌 미완료 중요 일정 (최근 30일)\n"
+            for i, task in enumerate(tasks_data['important_tasks'], 1):
+                preview += f"{i}. ⭐ [{task.category}] {task.title} ({task.created_date})\n"
+            preview += "\n"
+
+        # 추가 메모
+        memo = self.memo_edit.toPlainText().strip()
+        if memo:
+            preview += f"📝 추가 메모\n{memo}\n\n"
+
+        preview += f"---\n보고 생성 시간: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+        return preview
+
+    def send_report(self):
+        """리포트 발송"""
+        if not self.validate_inputs():
+            return
+
         try:
-            now = datetime.now()
-            current_date = now.strftime("%Y-%m-%d")
-            current_time = now.strftime("%H:%M")
-            current_weekday = now.weekday()
-
-            for schedule in self.email_schedules:
-                if not schedule.get("enabled", True):
-                    continue
-
-                if schedule.get("send_time") != current_time:
-                    continue
-
-                if schedule.get("last_sent_date") == current_date:
-                    continue
-
-                should_send = False
-
-                if schedule.get("is_recurring", False):
-                    freq = schedule.get("frequency", "daily")
-                    if freq == "daily":
-                        should_send = True
-                    elif freq == "weekly":
-                        # 매주 발송: 지정된 요일인지 확인
-                        schedule_weekday = schedule.get("weekday", "monday")
-                        weekday_map = {
-                            "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-                            "friday": 4, "saturday": 5, "sunday": 6
-                        }
-                        target_weekday = weekday_map.get(schedule_weekday, 0)
-                        if current_weekday == target_weekday:
-                            should_send = True
-                else:
-                    if schedule.get("send_date") == current_date:
-                        should_send = True
-
-                if should_send:
-                    if self.send_email(schedule):
-                        schedule["last_sent_date"] = current_date
-                        schedule["last_sent_time"] = current_time
-
-                        if not schedule.get("is_recurring", False):
-                            schedule["enabled"] = False
-
-                        self.save_email_schedules()
-                        self.load_schedule_list()
-                        print(f"자동 발송 완료: {schedule['name']}")
-
-        except Exception as e:
-            print(f"자동 발송 체크 오류: {e}")
-
-    def send_email(self, schedule, is_test=False):
-        """실제 메일 발송"""
-        try:
+            # 메일 기능 사용 가능 여부 확인
             from utils.email_sender import EmailSender
-
             sender = EmailSender(self.storage_manager)
             available, error_msg = sender.check_availability()
 
             if not available:
-                if is_test:
-                    QMessageBox.critical(self, "메일 불가", error_msg)
-                return False
+                QMessageBox.critical(self, "메일 기능 사용 불가", error_msg)
+                return
 
-            return sender.send_scheduled_email(schedule, is_test=is_test)
+            reply = QMessageBox.question(
+                self, "리포트 발송 확인",
+                f"다음 {len(self.selected_recipients)}명에게 데일리 리포트를 발송하시겠습니까?\n\n" + "\n".join(self.selected_recipients),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                success = self.send_daily_report(is_test=False)
+
+                if success:
+                    QMessageBox.information(self, "발송 완료",
+                                            f"데일리 리포트가 {len(self.selected_recipients)}명에게 성공적으로 발송되었습니다.")
+                    self.accept()
+                else:
+                    QMessageBox.critical(self, "발송 실패", "데일리 리포트 발송에 실패했습니다.")
 
         except Exception as e:
-            if is_test:
-                QMessageBox.critical(self, "발송 실패", f"메일 발송 실패:\n{e}")
-            print(f"메일 발송 오류: {e}")
+            QMessageBox.critical(self, "오류", f"리포트 발송 중 오류가 발생했습니다:\n{e}")
+
+    def validate_inputs(self):
+        """입력 값 검증"""
+        if not self.subject_edit.text().strip():
+            QMessageBox.warning(self, "입력 오류", "메일 제목을 입력하세요.")
+            self.subject_edit.setFocus()
             return False
 
-    def load_email_schedules(self):
-        """예약 데이터 로드"""
-        try:
-            file_path = "data/email_schedules.json"
-            if os.path.exists(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"예약 로드 오류: {e}")
-        return []
+        if not self.selected_recipients:
+            QMessageBox.warning(self, "수신자 오류", "주소록에서 수신자를 선택하거나 직접 추가하세요.")
+            return False
 
-    def save_email_schedules(self):
-        """예약 데이터 저장"""
-        try:
-            os.makedirs("data", exist_ok=True)
-            file_path = "data/email_schedules.json"
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(self.email_schedules, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"예약 저장 오류: {e}")
+        if not (
+                self.all_tasks_check.isChecked() or self.completed_tasks_check.isChecked() or self.incomplete_tasks_check.isChecked()):
+            QMessageBox.warning(self, "내용 선택 오류", "포함할 내용을 최소 1개 선택하세요.")
+            return False
 
-    def closeEvent(self, event):
-        """창 닫기 시 타이머 정리"""
-        if hasattr(self, 'auto_timer'):
-            self.auto_timer.stop()
-        event.accept()
+        # 카테고리 선택 확인
+        selected_categories = self.get_selected_categories()
+        if selected_categories is not None and len(selected_categories) == 0:
+            QMessageBox.warning(self, "카테고리 오류", "최소 1개의 카테고리를 선택하세요.")
+            return False
+
+        return True
+
+    def send_daily_report(self, is_test=False):
+        """실제 데일리 리포트 메일 발송"""
+        try:
+            import win32com.client as win32
+
+            # Outlook 연결
+            outlook = win32.Dispatch('outlook.application')
+            mail = outlook.CreateItem(0)
+
+            # 메일 제목
+            subject = self.subject_edit.text().strip()
+            if is_test:
+                subject = "[테스트] " + subject
+            mail.Subject = subject
+
+            # 수신자
+            mail.To = "; ".join(self.selected_recipients)
+
+            # 선택된 날짜
+            selected_date = self.date_edit.date().toString("yyyy-MM-dd")
+
+            # 작업 데이터 수집 (카테고리 필터 + 중요 일정 포함)
+            tasks_data = self.collect_tasks_data(selected_date)
+
+            # HTML 메일 내용 생성
+            html_body = self.create_html_report(tasks_data, selected_date, is_test)
+            mail.HTMLBody = html_body
+
+            # 메일 발송
+            mail.Send()
+
+            print(f"데일리 리포트 발송 완료: {subject}")
+            return True
+
+        except Exception as e:
+            print(f"데일리 리포트 발송 중 오류: {e}")
+            return False
+
+    def create_html_report(self, tasks_data, date_str, is_test=False):
+        """HTML 데일리 리포트 생성 (Outlook 호환성 개선 + 카테고리 필터 정보 + 중요 일정 추가)"""
+        current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
+        report_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y년 %m월 %d일")
+
+        # 카테고리 필터 정보 - 수정된 로직
+        selected_categories = self.get_selected_categories()
+        category_filter_info = ""
+
+        print(f"HTML 생성 시 카테고리 필터: {selected_categories}")  # 디버그
+
+        if selected_categories is not None and len(selected_categories) > 0:
+            # 특정 카테고리가 선택된 경우
+            category_filter_info = f'''
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center;">
+                    <strong>📂 포함된 카테고리:</strong> {', '.join(selected_categories)}
+                </td></tr>
+            </table>
+            '''
+        else:
+            # 모든 카테고리가 선택된 경우
+            category_filter_info = f'''
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center;">
+                    <strong>📂 포함된 카테고리:</strong> 모든 카테고리
+                </td></tr>
+            </table>
+            '''
+
+        # 테스트 메시지 (Outlook 호환)
+        test_message = ""
+        if is_test:
+            test_message = '''
+            <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; margin-bottom: 20px;">
+                <tr><td style="text-align: center; font-weight: bold;">🧪 테스트 메일입니다</td></tr>
+            </table>
+            '''
+
+        # 작업 목록
+        task_lists = ""
+
+        if self.all_tasks_check.isChecked() and tasks_data['all']:
+            task_lists += self.create_outlook_task_section("📋 전체 작업", tasks_data['all'][:5])
+        if self.completed_tasks_check.isChecked() and tasks_data['completed']:
+            task_lists += self.create_outlook_task_section("✅ 완료된 작업", tasks_data['completed'][:5])
+        if self.incomplete_tasks_check.isChecked() and tasks_data['incomplete']:
+            task_lists += self.create_outlook_task_section("⏳ 미완료 작업", tasks_data['incomplete'][:5])
+
+        # 미완료 중요 일정 섹션 (새로 추가)
+        important_section = ""
+        if self.include_important_check.isChecked() and tasks_data.get('important_tasks'):
+            important_section = self.create_important_tasks_section(tasks_data['important_tasks'][:10])
+
+        # 추가 메모 섹션 (Outlook 호환)
+        memo_section = ""
+        memo = self.memo_edit.toPlainText().strip()
+        if memo:
+            memo_section = f'''
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
+                        <h3 style="margin: 0; color: #333;">📝 추가 메모</h3>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
+                        {self.escape_html(memo).replace(chr(10), "<br>")}
+                    </td>
+                </tr>
+            </table>
+            '''
+
+        # Outlook 호환 HTML (테이블 기반 레이아웃)
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Todolist 리포트</title>
+            <!--[if mso]>
+            <style type="text/css">
+                table {{ border-collapse: collapse; }}
+                .header-table {{ background-color: #4facfe !important; }}
+            </style>
+            <![endif]-->
+        </head>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+
+            <!-- 메인 컨테이너 -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px;">
+                <tr>
+                    <td align="center">
+
+                        <!-- 메일 내용 테이블 -->
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden;">
+
+                            <!-- 헤더 -->
+                            <tr>
+                                <td class="header-table" style="background-color: #4facfe; padding: 25px 20px; text-align: center;">
+                                    <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 24px; font-weight: bold;">
+                                        📋 Todolist 리포트
+                                    </h1>
+                                    <div style="color: #ffffff; font-size: 16px; margin: 0;">
+                                        {current_time}
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- 메인 컨텐츠 -->
+                            <tr>
+                                <td style="padding: 25px 20px;">
+
+                                    {test_message}
+                                    {category_filter_info}
+
+                                    <!-- 데일리 리포트 요약 -->
+                                    <table width="100%" cellpadding="20" cellspacing="0" style="background-color: #e3f2fd; border-radius: 10px; margin-bottom: 20px;">
+                                        <tr>
+                                            <td>
+                                                <h2 style="margin: 0 0 15px 0; color: #1976d2; text-align: center;">📊 데일리 리포트</h2>
+
+                                                <!-- 통계 테이블 -->
+                                                <table width="100%" cellpadding="10" cellspacing="0">
+                                                    <tr>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #2196f3;">{tasks_data['total']}</div>
+                                                            <div style="font-size: 12px; color: #666;">전체 작업</div>
+                                                        </td>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #4caf50;">{tasks_data['completed_count']}</div>
+                                                            <div style="font-size: 12px; color: #666;">완료됨</div>
+                                                        </td>
+                                                        <td width="33%" style="text-align: center;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #f44336;">{tasks_data['total'] - tasks_data['completed_count']}</div>
+                                                            <div style="font-size: 12px; color: #666;">미완료</div>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+
+                                                <!-- 완료율 -->
+                                                <table width="100%" cellpadding="10" cellspacing="0" style="background-color: #ffffff; border-radius: 5px; margin-top: 15px;">
+                                                    <tr>
+                                                        <td>
+                                                            <table width="100%" cellpadding="0" cellspacing="0">
+                                                                <tr>
+                                                                    <td style="font-weight: bold;">완료율</td>
+                                                                    <td style="text-align: right; font-weight: bold; color: #4caf50;">
+                                                                        {tasks_data['completion_rate']:.0f}%
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 5px;">
+                                                                <tr>
+                                                                    <td style="background-color: #e0e0e0; height: 8px; border-radius: 4px;">
+                                                                        <div style="background-color: #4caf50; height: 8px; width: {tasks_data['completion_rate']:.0f}%; border-radius: 4px;"></div>
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                    {task_lists}
+                                    {important_section}
+                                    {memo_section}
+
+                                </td>
+                            </tr>
+
+                            <!-- 푸터 -->
+                            <tr>
+                                <td style="background-color: #f8f9fa; padding: 15px 20px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #e9ecef;">
+                                    🤖 Todolist PM에서 자동 생성됨 | {current_time}
+                                </td>
+                            </tr>
+
+                        </table>
+
+                    </td>
+                </tr>
+            </table>
+
+        </body>
+        </html>
+        """
+
+        return html
+
+    def create_outlook_task_section(self, title, tasks):
+        """Outlook 호환 작업 섹션 생성 (테이블 기반)"""
+        if not tasks:
+            return f"""
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
+                        <h3 style="margin: 0; color: #333;">{title}</h3>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="text-align: center; color: #666; padding: 20px;">작업이 없습니다</td>
+                </tr>
+            </table>
+            """
+
+        task_rows = ""
+        for task in tasks:
+            status = "✓" if task.completed else "○"
+            text_style = "text-decoration: line-through; color: #666;" if task.completed else ""
+            importance = "★ " if task.important else ""
+            border_color = "#4caf50" if task.completed else "#2196f3"
+
+            task_rows += f"""
+            <tr>
+                <td style="padding: 10px; background-color: #f8f9fa; border-left: 3px solid {border_color}; border-radius: 5px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="{text_style}">
+                                <strong>{status} {importance}{self.escape_html(task.title)}</strong>
+                                <span style="background-color: {self.get_category_color(task.category)}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">
+                                    {task.category}
+                                </span>
+                            </td>
+                        </tr>
+                        {f'<tr><td style="font-size: 12px; color: #666; padding-top: 5px;">{self.escape_html(task.content[:50])}</td></tr>' if task.content else ''}
+                    </table>
+                </td>
+            </tr>
+            <tr><td style="height: 5px;"></td></tr>
+            """
+
+        return f"""
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
+                    <h3 style="margin: 0; color: #333;">{title}</h3>
+                </td>
+            </tr>
+            <tr><td style="height: 10px;"></td></tr>
+            {task_rows}
+        </table>
+        """
+
+    def create_important_tasks_section(self, important_tasks):
+        """미완료 중요 일정 섹션 생성 (새로 추가된 기능)"""
+        if not important_tasks:
+            return ""
+
+        task_rows = ""
+        for task in important_tasks:
+            # 날짜 표시 형식
+            date_display = datetime.strptime(task.created_date, "%Y-%m-%d").strftime("%m/%d")
+
+            task_rows += f"""
+            <tr>
+                <td style="padding: 10px; background-color: #fff3e0; border-left: 3px solid #ff6b00; border-radius: 5px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td>
+                                <strong>⭐ {self.escape_html(task.title)}</strong>
+                                <span style="background-color: {self.get_category_color(task.category)}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 5px;">
+                                    {task.category}
+                                </span>
+                                <span style="background-color: #ff6b00; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 5px;">
+                                    {date_display}
+                                </span>
+                            </td>
+                        </tr>
+                        {f'<tr><td style="font-size: 12px; color: #666; padding-top: 5px;">{self.escape_html(task.content[:50])}</td></tr>' if task.content else ''}
+                    </table>
+                </td>
+            </tr>
+            <tr><td style="height: 5px;"></td></tr>
+            """
+
+        return f"""
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #ff6b00;">
+                    <h3 style="margin: 0; color: #ff6b00;">📌 미완료 중요 일정 (최근 30일)</h3>
+                </td>
+            </tr>
+            <tr><td style="height: 10px;"></td></tr>
+            {task_rows}
+        </table>
+        """
+
+    def get_category_color(self, category_name):
+        """카테고리 색상 반환"""
+        for category in self.storage_manager.categories:
+            if category.name == category_name:
+                return category.color
+        return "#6c757d"  # 기본 색상
+
+    def escape_html(self, text):
+        """HTML 특수문자 이스케이프"""
+        if not text:
+            return ""
+
+        html_escape_table = {
+            "&": "&amp;",
+            '"': "&quot;",
+            "'": "&#39;",
+            ">": "&gt;",
+            "<": "&lt;",
+        }
+
+        return "".join(html_escape_table.get(c, c) for c in text)

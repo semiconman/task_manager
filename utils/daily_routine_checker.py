@@ -3,12 +3,12 @@
 
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils.email_sender import EmailSender
 
 
 class DailyRoutineChecker:
-    """데일리 리포트 루틴 자동 실행 체크 (카테고리 필터 지원)"""
+    """데일리 리포트 루틴 자동 실행 체크 (카테고리 필터 + 중요 일정 포함 지원)"""
 
     def __init__(self, storage_manager):
         self.storage_manager = storage_manager
@@ -69,14 +69,15 @@ class DailyRoutineChecker:
     def execute_routine(self, routine, date_str):
         """개별 루틴 실행"""
         try:
-            # 메일 발송 설정 생성
+            # 메일 발송 설정 생성 (중요 일정 포함 설정 추가)
             settings = {
                 "custom_title": routine.get("subject", "데일리 리포트"),
                 "recipients": routine.get("recipients", []),
                 "content_types": routine.get("content_types", ["all"]),
                 "period": "오늘",
                 "memo": routine.get("memo", ""),
-                "selected_categories": routine.get("selected_categories")  # 카테고리 필터 추가
+                "selected_categories": routine.get("selected_categories"),  # 카테고리 필터
+                "include_important_tasks": routine.get("include_important_tasks", True)  # 중요 일정 포함 (기본값 True)
             }
 
             # 메일 발송 (데일리 리포트와 동일한 방식)
@@ -107,8 +108,9 @@ class DailyRoutineChecker:
 
             mail.To = "; ".join(recipients)
 
-            # 작업 데이터 수집 (카테고리 필터 적용)
-            tasks_data = self.collect_tasks_data(date_str, routine.get("selected_categories"))
+            # 작업 데이터 수집 (카테고리 필터 + 중요 일정 포함 적용)
+            tasks_data = self.collect_tasks_data(date_str, routine.get("selected_categories"),
+                                                 routine.get("include_important_tasks", True))
 
             # HTML 메일 내용 생성 (테이블 기반으로 수정)
             html_body = self.create_routine_html_report(routine, tasks_data, date_str)
@@ -163,8 +165,8 @@ class DailyRoutineChecker:
         except Exception as e:
             print(f"루틴 저장 중 오류: {e}")
 
-    def collect_tasks_data(self, date_str, selected_categories=None):
-        """지정된 날짜의 작업 데이터 수집 (카테고리 필터 적용)"""
+    def collect_tasks_data(self, date_str, selected_categories=None, include_important_tasks=True):
+        """지정된 날짜의 작업 데이터 수집 (카테고리 필터 + 중요 일정 포함 적용)"""
         all_tasks = self.storage_manager.get_tasks_by_date(date_str)
 
         # 1단계: 해당 날짜에 생성된 작업만 먼저 필터링
@@ -179,6 +181,12 @@ class DailyRoutineChecker:
             filtered_tasks = date_tasks
             print(f"루틴 - 2단계 카테고리 필터링: 모든 카테고리 포함 -> {len(filtered_tasks)}개 작업")
 
+        # 3단계: 미완료 중요 일정 수집 (설정 확인)
+        important_tasks = []
+        if include_important_tasks:
+            important_tasks = self.get_important_incomplete_tasks(date_str, selected_categories)
+            print(f"루틴 - 3단계 미완료 중요 일정: {len(important_tasks)}개")
+
         return {
             "all": filtered_tasks,
             "completed": [t for t in filtered_tasks if t.completed],
@@ -187,11 +195,43 @@ class DailyRoutineChecker:
             "completed_count": len([t for t in filtered_tasks if t.completed]),
             "completion_rate": (
                     len([t for t in filtered_tasks if t.completed]) / len(
-                filtered_tasks) * 100) if filtered_tasks else 0
+                filtered_tasks) * 100) if filtered_tasks else 0,
+            "important_tasks": important_tasks  # 중요 일정 추가
         }
 
+    def get_important_incomplete_tasks(self, current_date, selected_categories):
+        """지난 30일간의 다른 날짜 미완료 중요 작업 수집"""
+        try:
+            # 30일 전 날짜 계산
+            current_dt = datetime.strptime(current_date, "%Y-%m-%d")
+            thirty_days_ago = current_dt - timedelta(days=30)
+            thirty_days_ago_str = thirty_days_ago.strftime("%Y-%m-%d")
+
+            # 모든 작업에서 조건에 맞는 작업 필터링
+            important_tasks = []
+            for task in self.storage_manager.tasks:
+                # 조건: 다른 날짜 + 미완료 + 중요 + 최근 30일 내
+                if (task.created_date != current_date and
+                        not task.completed and
+                        task.important and
+                        thirty_days_ago_str <= task.created_date <= current_date):
+
+                    # 카테고리 필터 적용
+                    if selected_categories is None or task.category in selected_categories:
+                        important_tasks.append(task)
+
+            # 날짜순으로 정렬 (최신순)
+            important_tasks.sort(key=lambda x: x.created_date, reverse=True)
+
+            print(f"루틴 - 미완료 중요 일정 수집: {len(important_tasks)}개 (기간: {thirty_days_ago_str} ~ {current_date})")
+            return important_tasks
+
+        except Exception as e:
+            print(f"루틴 - 미완료 중요 일정 수집 중 오류: {e}")
+            return []
+
     def create_routine_html_report(self, routine, tasks_data, date_str):
-        """루틴용 HTML 리포트 생성 (테이블 기반, Outlook 호환성 개선)"""
+        """루틴용 HTML 리포트 생성 (테이블 기반, Outlook 호환성 개선 + 중요 일정 포함)"""
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
         report_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y년 %m월 %d일")
 
@@ -244,6 +284,11 @@ class DailyRoutineChecker:
 
         if "incomplete" in content_types and tasks_data['incomplete']:
             task_sections += self.create_outlook_task_section("⏳ 미완료 작업", tasks_data['incomplete'])
+
+        # 미완료 중요 일정 섹션 (새로 추가)
+        important_section = ""
+        if routine.get("include_important_tasks", True) and tasks_data.get("important_tasks"):
+            important_section = self.create_important_tasks_section(tasks_data["important_tasks"][:10])
 
         # 추가 메모 섹션 (테이블 기반)
         memo_section = ""
@@ -359,6 +404,7 @@ class DailyRoutineChecker:
                                     </table>
 
                                     {task_sections}
+                                    {important_section}
                                     {memo_section}
 
                                 </td>
@@ -431,6 +477,50 @@ class DailyRoutineChecker:
             <tr>
                 <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
                     <h3 style="margin: 0; color: #333;">{title} ({len(tasks)}개)</h3>
+                </td>
+            </tr>
+            <tr><td style="height: 10px;"></td></tr>
+            {task_rows}
+        </table>
+        """
+
+    def create_important_tasks_section(self, important_tasks):
+        """미완료 중요 일정 섹션 생성 (새로 추가된 기능)"""
+        if not important_tasks:
+            return ""
+
+        task_rows = ""
+        for task in important_tasks:
+            # 날짜 표시 형식
+            date_display = datetime.strptime(task.created_date, "%Y-%m-%d").strftime("%m/%d")
+
+            task_rows += f"""
+            <tr>
+                <td style="padding: 10px; background-color: #fff3e0; border-left: 3px solid #ff6b00; border-radius: 5px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td>
+                                <strong>⭐ {self.escape_html(task.title)}</strong>
+                                <span style="background-color: {self.get_category_color(task.category)}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 5px;">
+                                    {task.category}
+                                </span>
+                                <span style="background-color: #ff6b00; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 5px;">
+                                    {date_display}
+                                </span>
+                            </td>
+                        </tr>
+                        {f'<tr><td style="font-size: 12px; color: #666; padding-top: 5px;">{self.escape_html(task.content[:50])}</td></tr>' if task.content else ''}
+                    </table>
+                </td>
+            </tr>
+            <tr><td style="height: 5px;"></td></tr>
+            """
+
+        return f"""
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #ff6b00;">
+                    <h3 style="margin: 0; color: #ff6b00;">📌 미완료 중요 일정 (최근 30일)</h3>
                 </td>
             </tr>
             <tr><td style="height: 10px;"></td></tr>

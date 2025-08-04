@@ -120,8 +120,8 @@ class EmailSettingsDialog(QDialog):
         self.daily_routines = self.load_daily_routines()
 
         self.setWindowTitle("메일 발송 설정")
-        self.setMinimumSize(800, 650)  # 크기 증가
-        self.setMaximumSize(1000, 750)  # 최대 크기도 증가
+        self.setMinimumSize(800, 700)  # 크기 증가 (중요 일정 포함 체크박스 추가로)
+        self.setMaximumSize(1000, 800)  # 최대 크기도 증가
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.init_ui()
@@ -527,6 +527,13 @@ class EmailSettingsDialog(QDialog):
         content_check_layout.addWidget(self.routine_incomplete_check)
         content_layout.addLayout(content_check_layout)
 
+        # 중요 일정 포함 체크박스 추가 (새로운 기능)
+        self.routine_include_important_check = QCheckBox("미완료 중요 일정 포함 (최근 30일)")
+        self.routine_include_important_check.setChecked(True)  # 기본 체크됨
+        self.routine_include_important_check.setToolTip("다른 날짜의 미완료 중요 작업을 별도 섹션으로 포함합니다.")
+        self.routine_include_important_check.setStyleSheet("color: #d32f2f; font-weight: bold; font-size: 10px;")
+        content_layout.addWidget(self.routine_include_important_check)
+
         category_content_layout.addWidget(content_group)
         right_layout.addLayout(category_content_layout)
 
@@ -719,7 +726,8 @@ class EmailSettingsDialog(QDialog):
                 "custom_title": "테스트 메일",
                 "recipients": recipients,
                 "content_types": ["all"],
-                "period": "오늘"
+                "period": "오늘",
+                "include_important_tasks": True  # 중요 일정 포함
             }
 
             # 테스트 메일 발송
@@ -991,7 +999,7 @@ class EmailSettingsDialog(QDialog):
         return True
 
     def collect_routine_data(self):
-        """루틴 폼 데이터 수집"""
+        """루틴 폼 데이터 수집 (중요 일정 포함 설정 추가)"""
         selected_weekdays = [day for day, check in self.weekday_checks.items() if check.isChecked()]
 
         content_types = []
@@ -1007,11 +1015,12 @@ class EmailSettingsDialog(QDialog):
             "content_types": content_types,
             "recipients": self.selected_routine_recipients.copy(),
             "memo": self.routine_memo_edit.toPlainText().strip(),
-            "selected_categories": self.get_routine_selected_categories()  # 카테고리 필터 추가
+            "selected_categories": self.get_routine_selected_categories(),  # 카테고리 필터
+            "include_important_tasks": self.routine_include_important_check.isChecked()  # 중요 일정 포함 (새로 추가)
         }
 
     def load_routine_to_form(self, routine):
-        """루틴 데이터를 폼에 로드"""
+        """루틴 데이터를 폼에 로드 (중요 일정 포함 설정 추가)"""
         self.routine_name_edit.setText(routine.get("name", ""))
         self.routine_subject_edit.setText(routine.get("subject", ""))
 
@@ -1048,6 +1057,10 @@ class EmailSettingsDialog(QDialog):
             for category_name, check in self.routine_category_checks.items():
                 check.setChecked(category_name in selected_categories)
 
+        # 중요 일정 포함 설정 (새로 추가)
+        include_important = routine.get("include_important_tasks", True)  # 기본값 True
+        self.routine_include_important_check.setChecked(include_important)
+
         # 메모 설정
         self.routine_memo_edit.setPlainText(routine.get("memo", ""))
 
@@ -1072,10 +1085,13 @@ class EmailSettingsDialog(QDialog):
         for check in self.routine_category_checks.values():
             check.setChecked(True)
 
+        # 중요 일정 포함 초기화 (기본값 True)
+        self.routine_include_important_check.setChecked(True)
+
         self.routine_memo_edit.clear()
 
     def refresh_routine_list(self):
-        """루틴 목록 새로고침 - 발송 이력 포함"""
+        """루틴 목록 새로고침 - 발송 이력 + 중요 일정 포함 상태 표시"""
         self.routine_list.clear()
 
         for routine in self.daily_routines:
@@ -1103,6 +1119,11 @@ class EmailSettingsDialog(QDialog):
                 else:
                     category_info = f" [{', '.join(selected_categories[:2])} 외 {len(selected_categories) - 2}개]"
 
+            # 중요 일정 포함 상태 (새로 추가)
+            important_status = ""
+            if routine.get("include_important_tasks", True):
+                important_status = " 📌"
+
             # 발송 이력 정보 추가
             last_sent_info = ""
             last_sent_date = routine.get("last_sent_date")
@@ -1113,7 +1134,7 @@ class EmailSettingsDialog(QDialog):
             elif total_sent > 0:
                 last_sent_info = f"\n총 발송: {total_sent}회"
 
-            display_text = f"{enabled} {name}\n{weekday_str} {time} | {recipient_count}명{category_info}{last_sent_info}"
+            display_text = f"{enabled} {name}{important_status}\n{weekday_str} {time} | {recipient_count}명{category_info}{last_sent_info}"
 
             item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, routine)
@@ -1149,7 +1170,8 @@ class EmailSettingsDialog(QDialog):
                 "recipients": recipients,
                 "custom_title": "업무현황보고",
                 "content_types": ["all", "completed", "incomplete"],
-                "period": "오늘"
+                "period": "오늘",
+                "include_important_tasks": True  # 중요 일정 포함 기본값
             }
             self.save_email_settings(email_settings)
 
@@ -1180,7 +1202,8 @@ class EmailSettingsDialog(QDialog):
             "custom_title": "업무현황보고",
             "content_types": ["all", "completed", "incomplete"],
             "period": "오늘",
-            "recipients": []
+            "recipients": [],
+            "include_important_tasks": True  # 중요 일정 포함 기본값
         }
 
     def save_email_settings(self, settings):
@@ -1212,6 +1235,8 @@ class EmailSettingsDialog(QDialog):
                         routine["last_sent_time"] = None
                     if "total_sent_count" not in routine:
                         routine["total_sent_count"] = 0
+                    if "include_important_tasks" not in routine:
+                        routine["include_important_tasks"] = True  # 기존 루틴에 중요 일정 포함 기본값 설정
 
                 return routines
         except Exception as e:
