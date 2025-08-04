@@ -3,7 +3,7 @@
 
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QCheckBox, QGroupBox, QDateEdit, QTextEdit,
@@ -119,8 +119,8 @@ class DailyReportDialog(QDialog):
         self.selected_recipients = []
 
         self.setWindowTitle("데일리 리포트")
-        self.setMinimumSize(700, 600)
-        self.setMaximumSize(800, 700)
+        self.setMinimumSize(700, 650)  # 높이 증가 (중요 일정 체크박스 추가로)
+        self.setMaximumSize(800, 750)  # 최대 높이도 증가
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.init_ui()
@@ -277,6 +277,13 @@ class DailyReportDialog(QDialog):
         content_layout_inner.addWidget(self.all_tasks_check)
         content_layout_inner.addWidget(self.completed_tasks_check)
         content_layout_inner.addWidget(self.incomplete_tasks_check)
+
+        # 중요 일정 포함 체크박스 추가
+        self.include_important_check = QCheckBox("📌 미완료 중요 일정 포함 (지난 30일)")
+        self.include_important_check.setChecked(True)  # 기본값: 체크됨
+        self.include_important_check.setToolTip("지난 30일간의 다른 날짜 미완료 중요 작업을 별도 섹션으로 포함")
+        self.include_important_check.setStyleSheet("font-weight: bold; color: #d32f2f; margin-top: 10px;")
+        content_layout_inner.addWidget(self.include_important_check)
 
         # 오른쪽: 추가 메모
         memo_group = QGroupBox("추가 메모")
@@ -519,6 +526,56 @@ class DailyReportDialog(QDialog):
                 filtered_tasks) * 100) if filtered_tasks else 0
         }
 
+    def collect_important_tasks(self, date_str):
+        """지난 30일간의 다른 날짜 미완료 중요 작업 수집 (카테고리 필터 적용)"""
+        if not self.include_important_check.isChecked():
+            return []
+
+        try:
+            # 지난 30일 범위 계산
+            current_date = datetime.strptime(date_str, "%Y-%m-%d")
+            start_date = current_date - timedelta(days=30)
+            start_date_str = start_date.strftime("%Y-%m-%d")
+
+            print(f"중요 작업 수집 범위: {start_date_str} ~ {date_str}")
+
+            # 모든 작업에서 조건에 맞는 작업 필터링
+            important_tasks = []
+            selected_categories = self.get_selected_categories()
+
+            for task in self.storage_manager.tasks:
+                # 1. 다른 날짜의 작업인지 확인
+                if task.created_date == date_str:
+                    continue
+
+                # 2. 지난 30일 범위 내인지 확인
+                if task.created_date < start_date_str or task.created_date > date_str:
+                    continue
+
+                # 3. 중요하고 미완료인지 확인
+                if not (task.important and not task.completed):
+                    continue
+
+                # 4. 카테고리 필터 적용
+                if selected_categories is not None:
+                    if task.category not in selected_categories:
+                        continue
+
+                important_tasks.append(task)
+
+            # 날짜순으로 정렬 (최신순)
+            important_tasks.sort(key=lambda x: x.created_date, reverse=True)
+
+            print(f"수집된 중요 작업 수: {len(important_tasks)}")
+            for task in important_tasks:
+                print(f"  - {task.created_date} [{task.category}] {task.title}")
+
+            return important_tasks
+
+        except Exception as e:
+            print(f"중요 작업 수집 중 오류: {e}")
+            return []
+
     def create_preview_text(self, tasks_data, date_str):
         """미리보기 텍스트 생성"""
         preview = f"=== {date_str} 일일 업무 보고 ===\n\n"
@@ -559,6 +616,15 @@ class DailyReportDialog(QDialog):
                 importance = "⭐ " if task.important else ""
                 preview += f"{i}. {importance}[{task.category}] {task.title}\n"
             preview += "\n"
+
+        # 중요 일정 섹션 추가
+        if self.include_important_check.isChecked():
+            important_tasks = self.collect_important_tasks(date_str)
+            if important_tasks:
+                preview += "📌 미완료 중요 일정 (지난 30일)\n"
+                for i, task in enumerate(important_tasks, 1):
+                    preview += f"{i}. ⭐ {task.created_date} [{task.category}] {task.title}\n"
+                preview += "\n"
 
         # 추가 메모
         memo = self.memo_edit.toPlainText().strip()
@@ -652,8 +718,11 @@ class DailyReportDialog(QDialog):
             # 작업 데이터 수집 (카테고리 필터 적용)
             tasks_data = self.collect_tasks_data(selected_date)
 
+            # 중요 작업 데이터 수집
+            important_tasks = self.collect_important_tasks(selected_date)
+
             # HTML 메일 내용 생성
-            html_body = self.create_html_report(tasks_data, selected_date, is_test)
+            html_body = self.create_html_report(tasks_data, important_tasks, selected_date, is_test)
             mail.HTMLBody = html_body
 
             # 메일 발송
@@ -666,8 +735,8 @@ class DailyReportDialog(QDialog):
             print(f"데일리 리포트 발송 중 오류: {e}")
             return False
 
-    def create_html_report(self, tasks_data, date_str, is_test=False):
-        """HTML 데일리 리포트 생성 (Outlook 호환성 개선 + 카테고리 필터 정보 추가)"""
+    def create_html_report(self, tasks_data, important_tasks, date_str, is_test=False):
+        """HTML 데일리 리포트 생성 (Outlook 호환성 개선 + 카테고리 필터 정보 + 중요 일정 섹션 추가)"""
         current_time = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
         report_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y년 %m월 %d일")
 
@@ -714,6 +783,11 @@ class DailyReportDialog(QDialog):
             task_lists += self.create_outlook_task_section("✅ 완료된 작업", tasks_data['completed'][:5])
         if self.incomplete_tasks_check.isChecked() and tasks_data['incomplete']:
             task_lists += self.create_outlook_task_section("⏳ 미완료 작업", tasks_data['incomplete'][:5])
+
+        # 중요 일정 섹션 (새로 추가)
+        important_section = ""
+        if self.include_important_check.isChecked() and important_tasks:
+            important_section = self.create_important_tasks_section(important_tasks)
 
         # 추가 메모 섹션 (Outlook 호환)
         memo_section = ""
@@ -829,6 +903,7 @@ class DailyReportDialog(QDialog):
                                     </table>
 
                                     {task_lists}
+                                    {important_section}
                                     {memo_section}
 
                                 </td>
@@ -900,6 +975,50 @@ class DailyReportDialog(QDialog):
             <tr>
                 <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #e0e0e0;">
                     <h3 style="margin: 0; color: #333;">{title}</h3>
+                </td>
+            </tr>
+            <tr><td style="height: 10px;"></td></tr>
+            {task_rows}
+        </table>
+        """
+
+    def create_important_tasks_section(self, important_tasks):
+        """중요 일정 섹션 생성 (테이블 기반)"""
+        if not important_tasks:
+            return ""
+
+        task_rows = ""
+        for task in important_tasks:
+            # 날짜 정보 추가
+            date_info = f"{task.created_date}"
+
+            task_rows += f"""
+            <tr>
+                <td style="padding: 10px; background-color: #fff3e0; border-left: 3px solid #ff9800; border-radius: 5px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td>
+                                <strong>⭐ {self.escape_html(task.title)}</strong>
+                                <span style="background-color: {self.get_category_color(task.category)}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 10px;">
+                                    {task.category}
+                                </span>
+                                <span style="background-color: #9e9e9e; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 5px;">
+                                    {date_info}
+                                </span>
+                            </td>
+                        </tr>
+                        {f'<tr><td style="font-size: 12px; color: #666; padding-top: 5px;">{self.escape_html(task.content[:50])}</td></tr>' if task.content else ''}
+                    </table>
+                </td>
+            </tr>
+            <tr><td style="height: 5px;"></td></tr>
+            """
+
+        return f"""
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+            <tr>
+                <td style="padding: 10px 0 5px 0; border-bottom: 2px solid #ff9800;">
+                    <h3 style="margin: 0; color: #f57c00;">📌 미완료 중요 일정 (지난 30일)</h3>
                 </td>
             </tr>
             <tr><td style="height: 10px;"></td></tr>
