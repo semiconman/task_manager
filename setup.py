@@ -2,8 +2,8 @@ import sys
 from cx_Freeze import setup, Executable
 
 # 프로그램 정보 설정
-APP_NAME = "Todolist_PM_Ver1.71"
-VERSION = "1.71"
+APP_NAME = "Todolist_PM_Ver1.73"
+VERSION = "1.73"
 DESCRIPTION = "Todolist PM - 일정 관리"
 AUTHOR = "YoungJun_Ahn"
 

@@ -778,11 +778,11 @@ class DailyReportDialog(QDialog):
         task_lists = ""
 
         if self.all_tasks_check.isChecked() and tasks_data['all']:
-            task_lists += self.create_outlook_task_section("📋 전체 작업", tasks_data['all'][:5])
+            task_lists += self.create_outlook_task_section("📋 전체 작업", tasks_data['all'])
         if self.completed_tasks_check.isChecked() and tasks_data['completed']:
-            task_lists += self.create_outlook_task_section("✅ 완료된 작업", tasks_data['completed'][:5])
+            task_lists += self.create_outlook_task_section("✅ 완료된 작업", tasks_data['completed'])
         if self.incomplete_tasks_check.isChecked() and tasks_data['incomplete']:
-            task_lists += self.create_outlook_task_section("⏳ 미완료 작업", tasks_data['incomplete'][:5])
+            task_lists += self.create_outlook_task_section("⏳ 미완료 작업", tasks_data['incomplete'])
 
         # 중요 일정 섹션 (새로 추가)
         important_section = ""

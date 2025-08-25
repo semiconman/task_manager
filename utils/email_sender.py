@@ -123,11 +123,11 @@ class EmailSender:
         tasks = tasks_data["tasks"]
 
         if "all" in content_types and tasks["all"]:
-            task_sections += self.create_outlook_task_section("📌 전체 작업", tasks["all"][:5])
+            task_sections += self.create_outlook_task_section("📌 전체 작업", tasks["all"])
         if "completed" in content_types and tasks["completed"]:
-            task_sections += self.create_outlook_task_section("✅ 완료된 작업", tasks["completed"][:5])
+            task_sections += self.create_outlook_task_section("✅ 완료된 작업", tasks["completed"])
         if "incomplete" in content_types and tasks["incomplete"]:
-            task_sections += self.create_outlook_task_section("⏳ 미완료 작업", tasks["incomplete"][:5])
+            task_sections += self.create_outlook_task_section("⏳ 미완료 작업", tasks["incomplete"])
 
         # Outlook 호환 HTML (테이블 기반 레이아웃)
         html = f"""
